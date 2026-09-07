@@ -1,6 +1,7 @@
 name: Electron Desktop
 on:
   push:
+    branches: ['**']
     paths:
       [
         'src/**',
@@ -38,6 +39,9 @@ on:
         '*config.ts',
         '.github/workflows/electron.yml'
       ]
+concurrency:
+  group: electron-desktop-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     strategy:
