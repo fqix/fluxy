@@ -98,7 +98,11 @@ if [ "$platform" = mac ]; then
     bundle="$mount/Fluxy.app"
     [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle/Contents/Info.plist")" = dev.fengqi.fluxy.electron ] || fail 'Unexpected application identity.'
     /usr/bin/codesign --verify --deep --strict "$bundle"
-    /usr/sbin/spctl --assess --type execute "$bundle"
+    if ! /usr/sbin/spctl --assess --type execute "$bundle"; then
+        /usr/bin/codesign -dv --verbose=2 "$bundle" 2>&1 | /usr/bin/grep -q '^Signature=adhoc$' ||
+            fail 'Gatekeeper rejected the signed application.'
+        printf '%s\n' 'Fluxy: This release is not Apple-notarized. If macOS blocks the first launch, use System Settings > Privacy & Security > Open Anyway.' >&2
+    fi
     destination="$HOME/Applications/Fluxy.app"
     if [ -e "$destination" ]; then
         [ ! -L "$destination" ] || fail 'Refusing to replace a symlink.'

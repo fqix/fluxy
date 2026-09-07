@@ -8,7 +8,7 @@ The repository's `install.sh` and `install.ps1` download release packages, check
 curl --fail --location https://raw.githubusercontent.com/fqix/fluxy/main/install.sh | bash
 ```
 
-macOS installs the signed and notarized application to `~/Applications/Fluxy.app`. Existing Fluxy installations in that location are replaced; preferences are preserved. Quit Fluxy before updating. The script verifies the app identifier, code signature and Gatekeeper assessment.
+macOS installs the application to `~/Applications/Fluxy.app`. Existing Fluxy installations in that location are replaced; preferences are preserved. Quit Fluxy before updating. The script verifies the app identifier and code-signature integrity. Releases built without Apple credentials use ad-hoc signing and are not notarized. If Gatekeeper blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**. The script reports the assessment result without changing Gatekeeper settings.
 
 Linux supports **deb and rpm only**. Debian/Ubuntu use `apt-get`; Fedora/RHEL and compatible distributions use `dnf` or `yum`; openSUSE uses `zypper`. The script requests sudo for the package-manager step and rechecks a root-owned copy of the package before installation. System package managers resolve runtime dependencies. No AppImage is produced or installed.
 
@@ -41,7 +41,7 @@ Both scripts detect x64 or arm64 and allow an explicit override. The requested p
 
 ## Publishing contract
 
-The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packages. The release matrix covers macOS arm64, Linux x64/arm64, and Windows x64/arm64. Each runner builds its native architecture, with explicit architecture selection for Node.js, the core, the Helper and Electron packaging. Linux ARM64 uses `ubuntu-24.04-arm`; Windows ARM64 uses `windows-11-arm`. The final publish job runs only when all platform builds succeed. macOS needs the existing Developer ID/notarization secrets; Windows accepts optional `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` signing secrets.
+The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packages. The release matrix covers macOS arm64, Linux x64/arm64, and Windows x64/arm64. Each runner builds its native architecture, with explicit architecture selection for Node.js, the core, the Helper and Electron packaging. Linux ARM64 uses `ubuntu-24.04-arm`; Windows ARM64 uses `windows-11-arm`. The final publish job runs only when all platform builds succeed. macOS uses Developer ID signing and notarization when all five Apple signing secrets are configured, or ad-hoc signing without notarization when none are configured. Partial configuration fails the build; Windows accepts optional `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` signing secrets.
 
 `tools/publish-electron-release.mjs --prepare` creates per-file SHA-256 sidecars, stable aliases, and a release plan without uploading anything. The aggregate `--publish release-artifacts` step uploads:
 

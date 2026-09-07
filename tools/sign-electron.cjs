@@ -23,7 +23,7 @@ function refreshManifests(resources) {
     writeFileSync(helper + '.json', JSON.stringify(helperManifest, null, 2) + '\n')
 }
 async function sign(options) {
-    if (!options.identity) throw new Error('A Developer ID signing identity is required')
+    if (!options.identity) throw new Error("A signing identity is required (use '-' for ad-hoc signing)")
     await signBundle(options)
     // Nested Mach-O signatures change bytes. Refresh integrity metadata before sealing
     // the outer bundle a second time; electron-builder notarizes only after this returns.
@@ -32,11 +32,9 @@ async function sign(options) {
         '--force',
         '--sign',
         options.identity,
-        '--options',
-        'runtime',
         '--preserve-metadata=entitlements,requirements,flags'
     ]
-    if (options.identity !== '-') args.push('--timestamp')
+    if (options.identity !== '-') args.push('--options', 'runtime', '--timestamp')
     if (options.keychain) args.push('--keychain', options.keychain)
     execFileSync('/usr/bin/codesign', [...args, options.app], { stdio: 'inherit' })
     execFileSync('/usr/bin/codesign', ['--verify', '--deep', '--strict', options.app], {
