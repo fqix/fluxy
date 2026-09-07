@@ -75,6 +75,9 @@ export function publishRelease(directories, tag) {
             readFileSync(join(directory, name))
         }
     }
+    const target = execFileSync('git', ['rev-parse', '--verify', `${tag}^{commit}`], {
+        encoding: 'utf8'
+    }).trim()
     const gh = (args) => execFileSync('gh', args, { stdio: 'inherit' })
     const exists = (name) => {
         try {
@@ -108,7 +111,7 @@ export function publishRelease(directories, tag) {
                 'create',
                 feed,
                 '--target',
-                tag,
+                target,
                 '--title',
                 `Fluxy updates (${plan.arch})`,
                 '--notes',
