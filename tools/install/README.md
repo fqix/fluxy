@@ -41,13 +41,14 @@ Both scripts detect x64 or arm64 and allow an explicit override. The requested p
 
 ## Publishing contract
 
-The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packages. Each runner builds its native architecture. The final publish job runs only when all platform builds succeed. macOS needs the existing Developer ID/notarization secrets; Windows accepts optional `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` signing secrets.
+The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packages. The release matrix covers macOS arm64, Linux x64/arm64, and Windows x64/arm64. Each runner builds its native architecture, with explicit architecture selection for Node.js, the core, the Helper and Electron packaging. Linux ARM64 uses `ubuntu-24.04-arm`; Windows ARM64 uses `windows-11-arm`. The final publish job runs only when all platform builds succeed. macOS needs the existing Developer ID/notarization secrets; Windows accepts optional `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` signing secrets.
 
 `tools/publish-electron-release.mjs --prepare` creates per-file SHA-256 sidecars, stable aliases, and a release plan without uploading anything. The aggregate `--publish release-artifacts` step uploads:
 
 - Versioned assets under `electron-vVERSION`, such as `Fluxy-0.1.0-linux-amd64.deb` and its `.sha256` sidecar.
 - Stable aliases under `electron-stable-ARCH`, such as `Fluxy-linux-x64.deb` and its `.sha256` sidecar.
-- Versioned updater packages followed by each platform's `latest*.yml` metadata.
+- Versioned-release metadata named `latest-OS-ARCH.yml` (for example, `latest-win-arm64.yml`), so architectures cannot overwrite each other.
+- Versioned updater packages followed by metadata in each architecture's stable feed: `latest-mac.yml` on macOS, `latest.yml` on Windows, and `latest-linux.yml` / `latest-linux-arm64.yml` on Linux.
 
 The one-line commands become usable after these scripts are pushed to the repository and matching artifacts are publicly accessible. Missing assets, inaccessible/private releases and checksum mismatches cause an explicit failure rather than an attempted installation. A release upload in progress can briefly cause a checksum mismatch; rerun after publishing completes.
 

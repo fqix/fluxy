@@ -42,13 +42,20 @@ export function prepareRelease(directory, version, platform, arch) {
         versioned.push(name)
         stable.push(name)
     }
-    const manifest = { darwin: 'latest-mac.yml', linux: 'latest-linux.yml', win32: 'latest.yml' }[
-        platform
-    ]
+    const manifest = {
+        darwin: 'latest-mac.yml',
+        linux: arch === 'arm64' ? 'latest-linux-arm64.yml' : 'latest-linux.yml',
+        win32: 'latest.yml'
+    }[platform]
     const text = readFileSync(join(directory, manifest), 'utf8')
     if (!text.split(/\r?\n/).some((line) => line.trim() === `version: ${version}`))
         throw new Error('Update manifest version differs')
-    versioned.push(manifest)
+    // Versioned releases share one asset namespace across all architectures.
+    // Stable feeds retain the filenames expected by electron-updater.
+    const versionedManifest = `latest-${os}-${arch}.yml`
+    if (versionedManifest !== manifest)
+        copyFileSync(join(directory, manifest), join(directory, versionedManifest))
+    versioned.push(versionedManifest)
     const plan = { version, platform, arch, versioned, stable, manifest }
     writeFileSync(join(directory, 'release-plan.json'), JSON.stringify(plan, null, 2) + '\n')
     return plan

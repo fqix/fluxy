@@ -8,6 +8,8 @@ Fluxy 是使用 **Electron、TypeScript 和 React** 构建的网络调试桌面�
 
 在对应平台的终端执行以下命令，下载并安装最新发布版。
 
+发布矩阵覆盖 **macOS ARM64、Linux x64/ARM64、Windows x64/ARM64**，Linux 提供 deb 和 rpm 安装包，暂未配置 ARM32。
+
 ### macOS / Linux
 
 ```sh

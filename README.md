@@ -8,6 +8,8 @@ Fluxy is a network inspection desktop app built with **Electron, TypeScript and 
 
 Download and install the latest published release using the command for your platform.
 
+The release matrix covers **macOS ARM64, Linux x64/ARM64, and Windows x64/ARM64**. Linux produces deb and rpm packages. ARM32 is not configured.
+
 ### macOS / Linux
 
 ```sh

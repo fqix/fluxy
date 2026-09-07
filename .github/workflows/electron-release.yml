@@ -12,8 +12,27 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - os: windows-latest
+            platform: win32
+            arch: x64
+          - os: windows-11-arm
+            platform: win32
+            arch: arm64
+    name: Build ${{ matrix.platform }} (${{ matrix.arch }})
     runs-on: ${{ matrix.os }}
+    env:
+      FLUXY_BUILD_PLATFORM: ${{ matrix.platform }}
+      FLUXY_BUILD_ARCH: ${{ matrix.arch }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -21,6 +40,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+          architecture: ${{ matrix.arch }}
           cache: npm
       - uses: actions/setup-go@v5
         with:
@@ -31,6 +51,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate native build architecture
+        run: node -e 'if(process.platform !== process.env.FLUXY_BUILD_PLATFORM || process.arch !== process.env.FLUXY_BUILD_ARCH) throw Error("Runner architecture differs from release target")'
       - name: Validate release version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -62,23 +84,23 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npx electron-builder --mac --publish never -c.forceCodeSigning=true -c.mac.notarize=true
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never -c.forceCodeSigning=true -c.mac.notarize=true
       - name: Build Linux deb and rpm
         if: runner.os == 'Linux'
-        run: npx electron-builder --linux deb rpm --publish never
+        run: npx electron-builder --linux deb rpm --${{ matrix.arch }} --publish never
       - name: Build Windows installer
         if: runner.os == 'Windows'
         env:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
-        run: npx electron-builder --win nsis --publish never
+        run: npx electron-builder --win nsis --${{ matrix.arch }} --publish never
       - name: Prepare installer aliases and checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node tools/publish-electron-release.mjs --prepare
       - uses: actions/upload-artifact@v4
         with:
-          name: installers-${{ runner.os }}
+          name: installers-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
             dist/Fluxy-*
             dist/latest*.yml
