@@ -5,7 +5,7 @@ import {
     type DesktopProxyBackend,
     type ProxyCommand,
     type ProxyValues
-} from '../../src/main/desktop-proxy'
+} from '../../src/main/system/desktop-proxy'
 
 function gnomeEnvironment() {
     const entries: ProxyValues = {

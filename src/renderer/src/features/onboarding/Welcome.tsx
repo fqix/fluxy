@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, LockKeyhole, Network, ShieldCheck, Wrench } from 'lucide-react'
-import type { CertificateStatus, Snapshot } from '@shared/model'
+import type { CertificateStatus, Snapshot } from '@shared/contracts/model'
 import icon from '@assets/icon.png'
 
 export function Welcome({

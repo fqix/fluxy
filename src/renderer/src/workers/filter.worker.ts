@@ -1,5 +1,5 @@
-import { compileFilter, filterFieldValue, type FilterRule } from '@shared/filters'
-import type { Transaction } from '@shared/model'
+import { compileFilter, filterFieldValue, type FilterRule } from '@shared/traffic/filters'
+import type { Transaction } from '@shared/contracts/model'
 self.onmessage = ({ data }: MessageEvent<{ transactions: Transaction[]; rules: FilterRule[] }>) => {
     const matches = compileFilter(data.rules)
     self.postMessage(

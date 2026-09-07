@@ -3,9 +3,9 @@ import { mkdtemp, rm, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
-import { Store } from '../../src/main/store'
-import { SystemProxy } from '../../src/main/system-proxy'
-import * as desktop from '../../src/main/desktop-proxy'
+import { Store } from '../../src/main/storage/store'
+import { SystemProxy } from '../../src/main/system/system-proxy'
+import * as desktop from '../../src/main/system/desktop-proxy'
 
 vi.mock('node:child_process', async (original) => ({
     ...(await original<typeof import('node:child_process')>()),

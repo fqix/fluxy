@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { executableName } from '../../src/main/helper-platform'
+import { executableName } from '../../src/main/system/helper-platform'
 
 const electronPath = createRequire(join(process.cwd(), 'package.json'))('electron') as string
 const resources = process.env.FLUXY_TEST_EXECUTABLE

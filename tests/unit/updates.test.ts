@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { UpdateService } from '../../src/main/updates'
+import { UpdateService } from '../../src/main/updates/updates'
 function fixture(supported = true) {
     const backend = Object.assign(new EventEmitter(), {
         autoDownload: true,

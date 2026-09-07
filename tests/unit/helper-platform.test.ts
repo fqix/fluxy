@@ -6,9 +6,9 @@ import {
     portableUninstallationScript,
     encodedPowerShell,
     supportedHelperPlatform
-} from '../../src/main/helper-platform'
-import { tunInterfaceName } from '../../src/main/tun-platform'
-import { tunSettingsSchema } from '../../src/shared/model'
+} from '../../src/main/system/helper-platform'
+import { tunInterfaceName } from '../../src/main/tun/tun-platform'
+import { tunSettingsSchema } from '../../src/shared/contracts/model'
 const hash = 'a'.repeat(64)
 const hashes = { helperSHA256: hash, coreSHA256: hash }
 describe('cross-platform helper integration', () => {

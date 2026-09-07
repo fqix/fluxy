@@ -11,12 +11,12 @@ import https from 'node:https'
 import net from 'node:net'
 import dgram from 'node:dgram'
 import forge from 'node-forge'
-import { Store } from '../../src/main/store'
-import { ProxyEngine } from '../../src/main/proxy'
-import { TunBridge, connect, openTunnel } from '../../src/main/tun-bridge'
-import { tunConfig } from '../../src/main/tun-config'
-import { TunService, unusedPort } from '../../src/main/tun'
-import { tunSettingsSchema } from '../../src/shared/model'
+import { Store } from '../../src/main/storage/store'
+import { ProxyEngine } from '../../src/main/capture/proxy'
+import { TunBridge, connect, openTunnel } from '../../src/main/tun/tun-bridge'
+import { tunConfig } from '../../src/main/tun/tun-config'
+import { TunService, unusedPort } from '../../src/main/tun/tun'
+import { tunSettingsSchema } from '../../src/shared/contracts/model'
 
 const execute = promisify(execFile)
 const core = join(process.cwd(), 'build/electron-core/fluxy-core')

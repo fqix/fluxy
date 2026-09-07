@@ -1,4 +1,4 @@
-import type { FluxyAPI } from '@shared/model'
+import type { FluxyAPI } from '@shared/contracts/model'
 declare global {
     interface Window {
         fluxy: FluxyAPI

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { HelperService, helperID, uninstallationScript } from '../../src/main/helper'
+import { HelperService, helperID, uninstallationScript } from '../../src/main/system/helper'
 
 describe.skipIf(process.platform !== 'darwin')('helper removal without system mutations', () => {
     let directory: string

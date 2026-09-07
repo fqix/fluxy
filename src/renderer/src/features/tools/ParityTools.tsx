@@ -2,10 +2,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { Run } from '@/types/actions'
-import { terminalEnvironment } from '@shared/setup'
+import { terminalEnvironment } from '@shared/app/setup'
 import { useState } from 'react'
-import type { Snapshot, Transaction } from '@shared/model'
-import type { ProjectAction } from '@shared/projects'
+import type { Snapshot, Transaction } from '@shared/contracts/model'
+import type { ProjectAction } from '@shared/workspace/projects'
 
 export function ProjectManager({
     snapshot,

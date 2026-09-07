@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { FluxyAPI, AppEvent } from '../shared/model'
+import type { FluxyAPI, AppEvent } from '../shared/contracts/model'
 const invoke = (channel: string, ...args: unknown[]) =>
     ipcRenderer.invoke(`fluxy:${channel}`, ...args)
 const api: FluxyAPI = {

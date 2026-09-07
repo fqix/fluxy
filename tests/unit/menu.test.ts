@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { MenuItemConstructorOptions } from 'electron'
-import { buildMenuTemplate } from '../../src/main/menu'
-import { initialMenuState, menuStateSchema, type MenuState } from '../../src/shared/menu'
+import { buildMenuTemplate } from '../../src/main/app/menu'
+import { initialMenuState, menuStateSchema, type MenuState } from '../../src/shared/app/menu'
 
 function menu(
     overrides: Partial<MenuState> = {},

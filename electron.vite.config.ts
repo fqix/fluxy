@@ -10,8 +10,8 @@ export default defineConfig({
             rollupOptions: {
                 input: {
                     index: 'src/main/index.ts',
-                    watchdog: 'src/main/watchdog.ts',
-                    'mcp-bridge': 'src/main/mcp-bridge.ts'
+                    watchdog: 'src/main/system/watchdog.ts',
+                    'mcp-bridge': 'src/main/integrations/mcp-bridge.ts'
                 }
             }
         }

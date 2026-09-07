@@ -6,8 +6,8 @@ import {
     composeSchema,
     settingsSchema,
     toCurl
-} from '../../src/shared/model'
-import { fromHAR, toHAR } from '../../src/shared/har'
+} from '../../src/shared/contracts/model'
+import { fromHAR, toHAR } from '../../src/shared/traffic/har'
 import { randomUUID } from 'node:crypto'
 describe('matching and validation', () => {
     it('treats glob metacharacters literally and matches complete URLs', () => {

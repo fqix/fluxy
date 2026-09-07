@@ -72,16 +72,16 @@ Tests use local servers and temporary storage. Real system proxy changes, certif
 
 ## Layout
 
-| Path                                     | Purpose                                                     |
-| ---------------------------------------- | ----------------------------------------------------------- |
-| `src/main`                               | Electron lifecycle, proxy, persistence, native integrations |
-| `src/preload`                            | Validated renderer bridge                                   |
-| `src/renderer`                           | React desktop UI                                            |
-| `src/shared`                             | Models, schemas and shared logic                            |
-| `tools/helper`                           | Cross-platform Go privilege helper                          |
-| `tools/sing-box`, `third_party/sing-box` | Pinned transport core and build tooling                     |
-| `tests`                                  | Unit, integration and Electron desktop tests                |
-| `resources`                              | Fluxy icons and redistribution notices                      |
+| Path                                     | Purpose                                                                   |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| `src/main`                               | [Main process modules](src/main/README.md): capture, TUN, system, storage |
+| `src/preload`                            | Validated renderer bridge                                                 |
+| `src/renderer`                           | React desktop UI                                                          |
+| `src/shared`                             | [Shared modules](src/shared/README.md): contracts, traffic, workspace     |
+| `tools/helper`                           | Cross-platform Go privilege helper                                        |
+| `tools/sing-box`, `third_party/sing-box` | Pinned transport core and build tooling                                   |
+| `tests`                                  | Unit, integration and Electron desktop tests                              |
+| `resources`                              | Fluxy icons and redistribution notices                                    |
 
 ## License and attribution
 

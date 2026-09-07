@@ -1,6 +1,11 @@
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { filterFields, filterOperators, filterError, type FilterRule } from '@shared/filters'
+import {
+    filterFields,
+    filterOperators,
+    filterError,
+    type FilterRule
+} from '@shared/traffic/filters'
 
 export function AdvancedFilters({
     rules,

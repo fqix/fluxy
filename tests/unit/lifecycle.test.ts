@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { stopServices } from '../../src/main/lifecycle'
+import { stopServices } from '../../src/main/app/lifecycle'
 
 describe('partial startup cleanup', () => {
     it('handles quitting before any services exist', async () => {

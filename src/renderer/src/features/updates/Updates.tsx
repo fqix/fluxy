@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import type { Run } from '@/types/actions'
 import { useEffect, useState } from 'react'
-import type { Snapshot } from '@shared/model'
+import type { Snapshot } from '@shared/contracts/model'
 
 export function Updates({ snapshot, run }: { snapshot: Snapshot; run: Run }) {
     const [preferences, setPreferences] = useState(snapshot.settings.updates)

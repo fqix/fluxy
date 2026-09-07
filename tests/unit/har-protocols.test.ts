@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { fromHAR, toHAR } from '../../src/shared/har'
-import { contentKind, transactionSchema } from '../../src/shared/model'
-import { protocolPanels } from '../../src/shared/protocols'
-import { decodeProtobuf } from '../../src/main/protobuf'
+import { fromHAR, toHAR } from '../../src/shared/traffic/har'
+import { contentKind, transactionSchema } from '../../src/shared/contracts/model'
+import { protocolPanels } from '../../src/shared/traffic/protocols'
+import { decodeProtobuf } from '../../src/main/protocols/protobuf'
 
 const fixture = JSON.parse(
     readFileSync(new URL('../fixtures/har/real-protocols.har', import.meta.url), 'utf8')

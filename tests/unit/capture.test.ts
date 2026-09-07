@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { CaptureController } from '../../src/main/capture'
-import { settingsSchema } from '../../src/shared/model'
+import { CaptureController } from '../../src/main/capture/capture'
+import { settingsSchema } from '../../src/shared/contracts/model'
 
 function setup() {
     const settings = settingsSchema.parse({ captureMode: 'proxy' })

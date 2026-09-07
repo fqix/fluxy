@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { activeFilterRules, type FilterRule } from '@shared/filters'
-import type { Transaction } from '@shared/model'
+import { activeFilterRules, type FilterRule } from '@shared/traffic/filters'
+import type { Transaction } from '@shared/contracts/model'
 export function useAdvancedFilter(
     transactions: Transaction[],
     rules: FilterRule[],

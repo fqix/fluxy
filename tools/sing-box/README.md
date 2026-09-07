@@ -76,7 +76,7 @@ On macOS, `tools/sign-electron.cjs` signs the executable, refreshes the binary c
 in the manifest and re-seals the application before notarization.
 
 The transport core is started by the cross-platform Go helper and managed
-by `src/main/tun.ts`. The former Xcode embedding mode and Python TUN prototype
+by `src/main/tun/tun.ts`. The former Xcode embedding mode and Python TUN prototype
 have been removed. See [helper platform requirements](../../tools/helper/README.md).
 
 ## Validate

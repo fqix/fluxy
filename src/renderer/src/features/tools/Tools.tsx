@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { HeaderTable } from '@/components/data/HeaderTable'
 import type { Run } from '@/types/actions'
-import { setupInstructions } from '@shared/setup'
+import { setupInstructions } from '@shared/app/setup'
 import { useState } from 'react'
 import {
     Plus,
@@ -23,7 +23,7 @@ import {
     type Transaction,
     type ComposeRequest,
     pretty
-} from '@shared/model'
+} from '@shared/contracts/model'
 
 export const ruleNames: Record<Rule['kind'], string> = {
     block: 'Block List',
@@ -789,7 +789,7 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
     const [scripts, setScripts] = useState(snapshot.scripts)
     const [selected, setSelected] = useState<string>()
     const current = scripts.find((s) => s.id === selected)
-    const update = (patch: Partial<import('@shared/model').Script>) =>
+    const update = (patch: Partial<import('@shared/contracts/model').Script>) =>
         setScripts((old) => old.map((s) => (s.id === selected ? { ...s, ...patch } : s)))
     const add = () => {
         const id = crypto.randomUUID()

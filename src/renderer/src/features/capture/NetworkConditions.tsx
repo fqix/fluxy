@@ -2,8 +2,8 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { Run } from '@/types/actions'
 import { useState } from 'react'
-import { networkPresets, type NetworkPreset } from '@shared/network-conditions'
-import { ruleSchema, type Rule, type Snapshot } from '@shared/model'
+import { networkPresets, type NetworkPreset } from '@shared/traffic/network-conditions'
+import { ruleSchema, type Rule, type Snapshot } from '@shared/contracts/model'
 
 export function NetworkConditions({
     snapshot,

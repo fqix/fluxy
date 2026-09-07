@@ -8,7 +8,7 @@ import {
     parseLinuxConnections,
     parseWindowsConnections,
     ProcessResolver
-} from '../../src/main/process-resolver'
+} from '../../src/main/capture/process-resolver'
 
 const socket = {
     remoteAddress: '127.0.0.1',

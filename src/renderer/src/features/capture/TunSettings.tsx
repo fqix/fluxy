@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import type { Run } from '@/types/actions'
 import { useState } from 'react'
 import { Network, Play, Square } from 'lucide-react'
-import type { Snapshot } from '@shared/model'
+import type { Snapshot } from '@shared/contracts/model'
 
 export function TunSettingsPanel({
     snapshot,

@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { Run } from '@/types/actions'
 import { useState, useEffect } from 'react'
-import { breakpointTemplateSchema, type Snapshot, type Transaction } from '@shared/model'
-import { breakpointMessage, parseBreakpointMessage } from '@shared/breakpoints'
+import { breakpointTemplateSchema, type Snapshot, type Transaction } from '@shared/contracts/model'
+import { breakpointMessage, parseBreakpointMessage } from '@shared/rules/breakpoints'
 
 const savedDrafts = new Map<string, string>()
 export function pruneBreakpointDrafts(transactions: Transaction[]) {

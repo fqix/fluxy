@@ -3,7 +3,7 @@ import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { once } from 'node:events'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { settingsSchema } from '../../src/shared/model'
+import { settingsSchema } from '../../src/shared/contracts/model'
 async function menu(app: ElectronApplication, id: string) {
     await expect
         .poll(() =>

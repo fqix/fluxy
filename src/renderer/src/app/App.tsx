@@ -49,7 +49,7 @@ import {
     type HighlightColor,
     type Snapshot,
     type Transaction
-} from '@shared/model'
+} from '@shared/contracts/model'
 import { Details, Inspector } from '@/features/traffic/Inspector'
 import {
     MCPSettings,
@@ -79,13 +79,17 @@ import {
     ProtobufSettings,
     CustomCertificateSettings
 } from '@/features/tools/ParityTools'
-import { workspaceSchema, type ProjectAction, type ProjectCatalog } from '@shared/projects'
-import { toolCommands, type MenuCommand, type MenuState } from '@shared/menu'
+import {
+    workspaceSchema,
+    type ProjectAction,
+    type ProjectCatalog
+} from '@shared/workspace/projects'
+import { toolCommands, type MenuCommand, type MenuState } from '@shared/app/menu'
 import { Updates } from '@/features/updates/Updates'
 import { NetworkConditions } from '@/features/capture/NetworkConditions'
 import { DiffView } from '@/features/diff/DiffView'
 import { AdvancedFilters } from '@/features/filters/AdvancedFilters'
-import type { FilterRule } from '@shared/filters'
+import type { FilterRule } from '@shared/traffic/filters'
 import icon from '@assets/icon.png'
 
 type Workspace = {

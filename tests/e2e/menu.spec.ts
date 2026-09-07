@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import http from 'node:http'
 import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
-import { initialMenuState } from '../../src/shared/menu'
+import { initialMenuState } from '../../src/shared/app/menu'
 
 async function state(app: ElectronApplication, id: string) {
     return app.evaluate(({ Menu }, id) => {

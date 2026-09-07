@@ -2,9 +2,9 @@ import { it, expect } from 'vitest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Store } from '../../src/main/store'
-import { ProxyEngine } from '../../src/main/proxy'
-import { DiffWorkspace } from '../../src/main/diff-workspace'
+import { Store } from '../../src/main/storage/store'
+import { ProxyEngine } from '../../src/main/capture/proxy'
+import { DiffWorkspace } from '../../src/main/diff/diff-workspace'
 it('keeps bounded comparison snapshots, pins and history across restart', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-diff-'))
     try {

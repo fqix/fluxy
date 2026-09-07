@@ -15,12 +15,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { once } from 'node:events'
 import { X509Certificate, randomBytes, createHash } from 'node:crypto'
-import { HelperRPC, HelperService, installationScript } from '../../src/main/helper'
-import { tunConfig } from '../../src/main/tun-config'
-import { tunSettingsSchema } from '../../src/shared/model'
-import { ensureCertificate } from '../../src/main/certificates'
-import { connect } from '../../src/main/tun-bridge'
-import { unusedPort } from '../../src/main/tun'
+import { HelperRPC, HelperService, installationScript } from '../../src/main/system/helper'
+import { tunConfig } from '../../src/main/tun/tun-config'
+import { tunSettingsSchema } from '../../src/shared/contracts/model'
+import { ensureCertificate } from '../../src/main/certificates/certificates'
+import { connect } from '../../src/main/tun/tun-bridge'
+import { unusedPort } from '../../src/main/tun/tun'
 const execute = promisify(cp.execFile)
 const production = join(process.cwd(), 'build/electron-helper/fluxy-helper')
 const core = join(process.cwd(), 'build/electron-core/fluxy-core')

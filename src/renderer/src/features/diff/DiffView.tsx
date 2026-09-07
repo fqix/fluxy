@@ -2,8 +2,8 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { useEffect, useRef, useState } from 'react'
-import type { Transaction } from '@shared/model'
-import type { DiffResult, DiffTarget, DiffPair } from '@shared/diff'
+import type { Transaction } from '@shared/contracts/model'
+import type { DiffResult, DiffTarget, DiffPair } from '@shared/workspace/diff'
 export function DiffView({
     transactions,
     initialIDs = [],

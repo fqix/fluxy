@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtemp, rm, access, readFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { certificateStatus, ensureCertificate } from '../../src/main/certificates'
+import { certificateStatus, ensureCertificate } from '../../src/main/certificates/certificates'
 
 describe('setup certificate identity', () => {
     it('checks fresh setup without generating a certificate or key', async () => {

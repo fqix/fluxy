@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import http from 'node:http'
 import { once } from 'node:events'
 import net from 'node:net'
-import type { FluxyAPI } from '../../src/shared/model'
+import type { FluxyAPI } from '../../src/shared/contracts/model'
 test('desktop captures real traffic, filters, inspects, persists and composes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-desktop-'))
     const origin = http.createServer((req, res) => {

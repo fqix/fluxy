@@ -12,11 +12,11 @@ import { gzipSync } from 'node:zlib'
 import net from 'node:net'
 import tls from 'node:tls'
 import { WebSocketServer, WebSocket } from 'ws'
-import { Store } from '../../src/main/store'
-import { CustomCertificates } from '../../src/main/custom-certificates'
-import { ensureCertificate } from '../../src/main/certificates'
-import { ProxyEngine } from '../../src/main/proxy'
-import { ruleSchema, type Rule } from '../../src/shared/model'
+import { Store } from '../../src/main/storage/store'
+import { CustomCertificates } from '../../src/main/certificates/custom-certificates'
+import { ensureCertificate } from '../../src/main/certificates/certificates'
+import { ProxyEngine } from '../../src/main/capture/proxy'
+import { ruleSchema, type Rule } from '../../src/shared/contracts/model'
 let directory: string,
     store: Store,
     engine: ProxyEngine,

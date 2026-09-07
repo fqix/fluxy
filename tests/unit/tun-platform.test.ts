@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 const run = vi.hoisted(() => vi.fn())
 vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => run(...args) }))
-import { routeInterface } from '../../src/main/tun-platform'
+import { routeInterface } from '../../src/main/tun/tun-platform'
 describe('native route discovery', () => {
     it.each([
         ['darwin', 'interface: en0\n', 'en0', '/sbin/route'],

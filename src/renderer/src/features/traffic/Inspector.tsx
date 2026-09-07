@@ -3,11 +3,11 @@ import type { Run } from '@/types/actions'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { timingLabels } from '@shared/timing'
+import { timingLabels } from '@shared/traffic/timing'
 import { useState, useEffect } from 'react'
-import { protocolPanels } from '@shared/protocols'
+import { protocolPanels } from '@shared/traffic/protocols'
 import { Copy, LockKeyhole, Pin, Send, Bookmark, X, ArrowDown, ArrowUp } from 'lucide-react'
-import { bytes, pretty, toCurl, type Transaction } from '@shared/model'
+import { bytes, pretty, toCurl, type Transaction } from '@shared/contracts/model'
 
 function Body({
     text,

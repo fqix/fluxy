@@ -7,14 +7,14 @@ import {
     compileFilter,
     activeFilterRules,
     filterError
-} from '../../src/shared/filters'
-import { fromHAR, toHAR } from '../../src/shared/har'
-import { redactTransaction } from '../../src/shared/redaction'
-import { compareTransactions, diffText, diffSections } from '../../src/main/diff'
-import { parseConnections, connectionOwner } from '../../src/main/process-resolver'
-import { matchesBreakpoint } from '../../src/main/rule-match'
-import { ruleSchema } from '../../src/shared/model'
-import { parseBreakpointMessage } from '../../src/shared/breakpoints'
+} from '../../src/shared/traffic/filters'
+import { fromHAR, toHAR } from '../../src/shared/traffic/har'
+import { redactTransaction } from '../../src/shared/traffic/redaction'
+import { compareTransactions, diffText, diffSections } from '../../src/main/diff/diff'
+import { parseConnections, connectionOwner } from '../../src/main/capture/process-resolver'
+import { matchesBreakpoint } from '../../src/main/rules/rule-match'
+import { ruleSchema } from '../../src/shared/contracts/model'
+import { parseBreakpointMessage } from '../../src/shared/rules/breakpoints'
 function transaction() {
     return fromHAR({
         log: {
