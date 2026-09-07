@@ -18,7 +18,13 @@ import { Readable, type Duplex } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib'
+import {
+    brotliDecompressSync,
+    gunzipSync,
+    inflateRawSync,
+    inflateSync,
+    zstdDecompressSync
+} from 'node:zlib'
 import { ensureCertificate } from '../certificates/certificates'
 import { Store } from '../storage/store'
 import { upstreamAgent } from './upstream'
@@ -44,12 +50,22 @@ const headers = (input: http.IncomingHttpHeaders): Headers =>
             .filter(([, v]) => v !== undefined)
             .map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v.join('\n') : String(v)])
     )
-function decode(buffer: Buffer, encoding?: string) {
+export function decode(buffer: Buffer, encoding?: string) {
     try {
         const options = { maxOutputLength: BODY_LIMIT }
         if (encoding === 'gzip') return gunzipSync(buffer, options)
         if (encoding === 'br') return brotliDecompressSync(buffer, options)
-        if (encoding === 'deflate') return inflateSync(buffer, options)
+        // Chromium has advertised zstd since 123, so origins negotiate it against browsers.
+        if (encoding === 'zstd' && typeof zstdDecompressSync === 'function')
+            return zstdDecompressSync(buffer, options)
+        if (encoding === 'deflate') {
+            try {
+                return inflateSync(buffer, options)
+            } catch {
+                // Some origins send bare DEFLATE (RFC 1951) without the zlib wrapper.
+                return inflateRawSync(buffer, options)
+            }
+        }
     } catch {
         /* A partial compressed body stays available as raw bytes. */
     }
