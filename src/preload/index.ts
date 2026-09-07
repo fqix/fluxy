@@ -1,0 +1,69 @@
+import { contextBridge, ipcRenderer } from 'electron'
+import type { FluxyAPI, AppEvent } from '../shared/model'
+const invoke = (channel: string, ...args: unknown[]) =>
+    ipcRenderer.invoke(`fluxy:${channel}`, ...args)
+const api: FluxyAPI = {
+    importCustomCertificate: (input) => invoke('certificate:custom-import', input),
+    deleteCustomCertificate: (id) => invoke('certificate:custom-delete', id),
+    resetCertificates: () => invoke('certificate:reset'),
+    resetHelper: () => invoke('helper:reset'),
+    protobufTypes: () => invoke('protobuf:types'),
+    decodeProtobuf: (id, side, type) => invoke('protobuf:decode', id, side, type),
+    gistReview: (ids) => invoke('gist:review', ids),
+    gistPublish: (input) => invoke('gist:publish', input),
+    templates: (value) => invoke('templates', value),
+    shortcuts: () => invoke('shortcuts'),
+    project: (action) => invoke('project', action),
+    exportProject: (id) => invoke('project:export', id),
+    importProject: () => invoke('project:import'),
+    exportOpenAPI: (format, ids) => invoke('openapi:export', format, ids),
+    deleteTransactions: (ids) => invoke('transaction:delete', ids),
+    prepareTerminal: (mode) => invoke('setup:terminal', mode),
+    update: (action) => invoke('update', action),
+    diffText: (left, right) => invoke('diff:text', left, right),
+    diffHistory: () => invoke('diff:history'),
+    diffRecord: (left, right) => invoke('diff:record', left, right),
+    diffHistoryChange: (id, patch) => invoke('diff:change', id, patch),
+    diffSaved: (id, target) => invoke('diff:saved', id, target),
+    diffExport: (input) => invoke('diff:export', input),
+    diff: (left, right, target) => invoke('diff', left, right, target),
+    debugInfo: () => invoke('debug:info'),
+    openLink: (link) => invoke('link', link),
+    exportCertificateFormat: (format, password) =>
+        invoke('certificate:export-format', format, password),
+    menuState: (state) => invoke('menu:state', state),
+    helperStatus: () => invoke('helper:status'),
+    installHelper: () => invoke('helper:install'),
+    uninstallHelper: () => invoke('helper:uninstall'),
+    certificateStatus: () => invoke('certificate:status'),
+    generateCertificate: () => invoke('certificate:generate'),
+    snapshot: () => invoke('snapshot'),
+    start: () => invoke('start'),
+    stop: () => invoke('stop'),
+    record: (v) => invoke('record', v),
+    clear: () => invoke('clear'),
+    settings: (v) => invoke('settings', v),
+    rules: (v) => invoke('rules', v),
+    scripts: (v) => invoke('scripts', v),
+    compose: (v) => invoke('compose', v),
+    updateTransaction: (id, v) => invoke('transaction', id, v),
+    applyBreakpoints: (edits) => invoke('breakpoints:apply', edits),
+    breakpoints: (action) => invoke('breakpoints', action),
+    breakpoint: (id, action, edit) => invoke('breakpoint', id, action, edit),
+    saveSession: (name) => invoke('session:save', name),
+    loadSession: (id) => invoke('session:load', id),
+    deleteSession: (id) => invoke('session:delete', id),
+    exportHAR: (ids) => invoke('har:export', ids),
+    importHAR: () => invoke('har:import'),
+    exportCertificate: () => invoke('certificate:export'),
+    trustCertificate: () => invoke('certificate:trust'),
+    systemProxy: (v) => invoke('systemProxy', v),
+    chooseFile: () => invoke('chooseFile'),
+    copy: (text) => invoke('copy', text),
+    onEvent: (listener) => {
+        const handler = (_event: Electron.IpcRendererEvent, value: AppEvent) => listener(value)
+        ipcRenderer.on('fluxy:event', handler)
+        return () => ipcRenderer.removeListener('fluxy:event', handler)
+    }
+}
+contextBridge.exposeInMainWorld('fluxy', api)

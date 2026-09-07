@@ -1,0 +1,172 @@
+{
+  "name": "fluxy",
+  "version": "0.1.0",
+  "description": "Fluxy network inspector — Electron and TypeScript desktop",
+  "private": true,
+  "license": "MIT",
+  "author": "Fluxy contributors; based on Rockxy",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "start": "electron-vite preview",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run core:build && npm run typecheck && electron-vite build",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "package": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "format": "prettier --write src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json",
+    "format:check": "prettier --check src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json",
+    "test:packaged": "FLUXY_TEST_EXECUTABLE=\"$PWD/dist/mac-arm64/Fluxy.app/Contents/MacOS/Fluxy\" playwright test",
+    "core:build": "node build-electron-core.mjs && node build-electron-helper.mjs",
+    "predev": "npm run core:build",
+    "pretest": "npm run core:build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "builder-util-runtime": "^9.7.0",
+    "electron-updater": "^6.8.9",
+    "http-mitm-proxy": "1.1.0",
+    "lucide-react": "^0.577.0",
+    "node-forge": "^1.3.1",
+    "protobufjs": "^8.8.0",
+    "proxy-agent": "^8.0.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.3.0"
+  },
+  "devDependencies": {
+    "@electron/osx-sign": "^2.7.0",
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^22.19.0",
+    "@types/node-forge": "^1.3.11",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.0",
+    "electron": "44.2.0",
+    "electron-builder": "^26.8.0",
+    "electron-vite": "5.0.0",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.0",
+    "vite": "^7.3.0",
+    "vitest": "^4.0.0"
+  },
+  "build": {
+    "appId": "dev.fengqi.fluxy.electron",
+    "productName": "Fluxy",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "LICENSE",
+      "COPYRIGHT.md",
+      "THIRD_PARTY_NOTICES.md"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "resources/icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "sign": "tools/sign-electron.cjs",
+      "extraResources": [
+        {
+          "from": "build/electron-core",
+          "to": "core",
+          "filter": [
+            "fluxy-core",
+            "fluxy-core.build.json",
+            "fluxy-core.licenses.txt"
+          ]
+        },
+        {
+          "from": "build/electron-helper",
+          "to": "helper",
+          "filter": [
+            "fluxy-helper",
+            "fluxy-helper.json",
+            "fluxy-helper.licenses.txt"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "icon": "resources/icon.png",
+      "target": [
+        "nsis"
+      ],
+      "extraResources": [
+        {
+          "from": "build/electron-core",
+          "to": "core",
+          "filter": [
+            "fluxy-core.exe",
+            "fluxy-core.exe.build.json",
+            "fluxy-core.exe.licenses.txt"
+          ]
+        },
+        {
+          "from": "build/electron-helper",
+          "to": "helper",
+          "filter": [
+            "fluxy-helper.exe",
+            "fluxy-helper.exe.json",
+            "fluxy-helper.licenses.txt"
+          ]
+        }
+      ]
+    },
+    "linux": {
+      "icon": "resources/icon.png",
+      "target": [
+        "deb",
+        "rpm"
+      ],
+      "extraResources": [
+        {
+          "from": "build/electron-core",
+          "to": "core",
+          "filter": [
+            "fluxy-core",
+            "fluxy-core.build.json",
+            "fluxy-core.licenses.txt"
+          ]
+        },
+        {
+          "from": "build/electron-helper",
+          "to": "helper",
+          "filter": [
+            "fluxy-helper",
+            "fluxy-helper.json",
+            "fluxy-helper.licenses.txt"
+          ]
+        }
+      ],
+      "category": "Development",
+      "maintainer": "Fluxy contributors",
+      "synopsis": "HTTP and HTTPS network inspector"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://github.com/fqix/fluxy/releases/download/electron-stable-${arch}/"
+      }
+    ],
+    "artifactName": "Fluxy-${version}-${os}-${arch}.${ext}",
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": false
+    }
+  },
+  "overrides": {
+    "http-mitm-proxy": {
+      "uuid": "^11.1.1"
+    }
+  },
+  "homepage": "https://github.com/fqix/fluxy"
+}

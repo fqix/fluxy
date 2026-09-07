@@ -1,0 +1,55 @@
+# Build outputs
+build/
+.build/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+
+# Local workspace metadata
+.claude/
+.codex/
+.agents/
+.cursor/
+CLAUDE.md
+AGENTS.md
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+.vscode/
+
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Sensitive data
+*.pem
+*.p12
+*.mobileprovision
+RELEASE.md
+
+# Debug
+*.log
+
+# Design
+.design-mockups/
+
+# Electron / TypeScript
+node_modules/
+out/
+dist/
+coverage/
+test-results/
+playwright-report/
+.electron-test/

@@ -1,0 +1,102 @@
+name: Electron Release
+on:
+  push:
+    tags: ['electron-v*']
+permissions:
+  contents: write
+concurrency:
+  group: electron-release
+  cancel-in-progress: false
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: |
+            tools/sing-box/go.sum
+            tools/helper/go.sum
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node -e 'if(process.env.RELEASE_TAG !== "electron-v"+require("./package.json").version) throw Error("Tag and package version must match")'
+      - name: Validate macOS signing configuration
+        if: runner.os == 'macOS'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: node -e 'for(const key of ["CSC_LINK","CSC_KEY_PASSWORD","APPLE_ID","APPLE_APP_SPECIFIC_PASSWORD","APPLE_TEAM_ID"]) if(!process.env[key]) throw Error("Missing release secret "+key)'
+      - run: npm ci
+      - name: Install RPM build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright test
+        if: runner.os == 'macOS'
+      - run: powershell -NoProfile -File tools/install/test-windows.ps1
+        if: runner.os == 'Windows'
+      - name: Build signed and notarized macOS artifacts
+        if: runner.os == 'macOS'
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: npx electron-builder --mac --publish never -c.forceCodeSigning=true -c.mac.notarize=true
+      - name: Build Linux deb and rpm
+        if: runner.os == 'Linux'
+        run: npx electron-builder --linux deb rpm --publish never
+      - name: Build Windows installer
+        if: runner.os == 'Windows'
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npx electron-builder --win nsis --publish never
+      - name: Prepare installer aliases and checksums
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node tools/publish-electron-release.mjs --prepare
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ runner.os }}
+          path: |
+            dist/Fluxy-*
+            dist/latest*.yml
+            dist/release-plan.json
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          pattern: installers-*
+      - name: Publish versioned release and update feeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node tools/publish-electron-release.mjs --publish release-artifacts

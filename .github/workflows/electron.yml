@@ -1,0 +1,95 @@
+name: Electron Desktop
+on:
+  push:
+    paths:
+      [
+        'src/**',
+        'tests/**',
+        'resources/**',
+        'tools/sing-box/**',
+        'build-electron-core.mjs',
+        'build-electron-helper.mjs',
+        'tools/helper/**',
+        'tools/install/**',
+        'tools/publish-electron-release.mjs',
+        'install.sh',
+        'install.ps1',
+        'third_party/sing-box',
+        'package*.json',
+        '*config.ts',
+        '.github/workflows/electron.yml'
+      ]
+  pull_request:
+    paths:
+      [
+        'src/**',
+        'tests/**',
+        'resources/**',
+        'tools/sing-box/**',
+        'build-electron-core.mjs',
+        'build-electron-helper.mjs',
+        'tools/helper/**',
+        'tools/install/**',
+        'tools/publish-electron-release.mjs',
+        'install.sh',
+        'install.ps1',
+        'third_party/sing-box',
+        'package*.json',
+        '*config.ts',
+        '.github/workflows/electron.yml'
+      ]
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+          cache-dependency-path: |
+            tools/sing-box/go.sum
+            tools/helper/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: npm ci
+      - name: Install RPM build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npx playwright install-deps chromium
+        if: runner.os == 'Linux'
+      - run: go test -race ./...
+        working-directory: tools/helper
+      - run: go vet ./...
+        working-directory: tools/helper
+      - run: npm test
+      - run: powershell -NoProfile -File tools/install/test-windows.ps1
+        if: runner.os == 'Windows'
+      - run: go test -race -tags=with_gvisor ./...
+        working-directory: tools/sing-box
+      - run: npm run build
+      - run: npx playwright test
+        if: runner.os != 'Linux'
+      - run: xvfb-run --auto-servernum npx playwright test
+        if: runner.os == 'Linux'
+      - run: npm run package
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Verify Linux deb and rpm packaging
+        if: runner.os == 'Linux'
+        run: npx electron-builder --linux deb rpm --publish never
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: electron-test-results-${{ runner.os }}
+          path: test-results/
