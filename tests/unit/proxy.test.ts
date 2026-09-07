@@ -512,38 +512,50 @@ describe('real proxy traffic', () => {
             expect(t.ssl).toBe(true)
             expect(t.responseBody).toBe('{"tls":"decrypted"}')
             store.rules = [rule('breakpoint')]
-            const child = spawn(process.platform === 'win32' ? 'curl.exe' : 'curl', [
-                '--noproxy',
-                '',
-                '--proxy',
-                `http://127.0.0.1:${port}`,
-                '--cacert',
-                engine.certificatePath,
-                `https://localhost:${tlsPort}/tls-breakpoint`
+            const child = spawn(process.execPath, [
+                join(process.cwd(), 'tests/fixtures/proxy-tls-client.mjs'),
+                String(port),
+                String(tlsPort),
+                engine.certificatePath
             ])
             child.stdout.resume()
-            child.stderr.resume()
+            let stderr = ''
+            child.stderr.on('data', (chunk) => {
+                stderr += chunk
+            })
             const exit = once(child, 'exit')
-            await waitFor(() => [...engine.transactions.values()].some((t) => t.state === 'paused'))
-            const paused = [...engine.transactions.values()].find((t) => t.state === 'paused')!
-            expect(paused.clientPID).toBe(child.pid)
-            expect(paused.clientSource).toBe('process')
-            expect(() =>
+            try {
+                await Promise.race([
+                    waitFor(() =>
+                        [...engine.transactions.values()].some((t) => t.state === 'paused')
+                    ),
+                    exit.then(([code]) => {
+                        throw new Error(`TLS client exited before breakpoint (${code}): ${stderr}`)
+                    })
+                ])
+                const paused = [...engine.transactions.values()].find((t) => t.state === 'paused')!
+                expect(paused.clientPID).toBe(child.pid)
+                expect(paused.clientSource).toBe('process')
+                expect(() =>
+                    engine.resolveBreakpoint(paused.id, 'continue', {
+                        url: 'https://example.com/',
+                        method: 'GET',
+                        headers: {},
+                        body: ''
+                    })
+                ).toThrow('TLS authority')
                 engine.resolveBreakpoint(paused.id, 'continue', {
-                    url: 'https://example.com/',
+                    url: `https://localhost:${tlsPort}/edited%2Fpath?q=%26`,
                     method: 'GET',
                     headers: {},
                     body: ''
                 })
-            ).toThrow('TLS authority')
-            engine.resolveBreakpoint(paused.id, 'continue', {
-                url: `https://localhost:${tlsPort}/edited%2Fpath?q=%26`,
-                method: 'GET',
-                headers: {},
-                body: ''
-            })
-            expect((await exit)[0]).toBe(0)
-            expect(paused.path).toBe('/edited%2Fpath?q=%26')
+                expect((await exit)[0], stderr).toBe(0)
+                expect(paused.path).toBe('/edited%2Fpath?q=%26')
+            } finally {
+                if (child.exitCode === null && child.signalCode === null) child.kill()
+                await exit
+            }
         } finally {
             secure.destroy()
             upstream.closeAllConnections()

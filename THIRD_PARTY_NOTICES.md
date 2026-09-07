@@ -18,6 +18,7 @@ retained when distributing them.
 | Package                     | Locked version | License                   |
 | --------------------------- | -------------- | ------------------------- |
 | `@modelcontextprotocol/sdk` | 1.30.0         | MIT                       |
+| `@peculiar/x509`            | 2.1.0          | MIT                       |
 | `builder-util-runtime`      | 9.7.0          | MIT                       |
 | `electron-updater`          | 6.8.9          | MIT                       |
 | `http-mitm-proxy`           | 1.1.0          | MIT                       |
@@ -27,6 +28,7 @@ retained when distributing them.
 | `proxy-agent`               | 8.0.2          | MIT                       |
 | `react`                     | 19.2.8         | MIT                       |
 | `react-dom`                 | 19.2.8         | MIT                       |
+| `reflect-metadata`          | 0.2.2          | Apache-2.0                |
 | `zod`                       | 4.5.4          | MIT                       |
 
 Lucide's license also includes MIT terms for portions derived from Feather:

@@ -59,7 +59,9 @@ require(${JSON.stringify(join(appPath, 'out/main/index.js'))})
 `
         )
         try {
-            await promisify(execFile)(electronPath, [bootstrap], {
+            // This direct launch needs the same test-only sandbox opt-out as Playwright.
+            const args = process.platform === 'linux' ? ['--no-sandbox', bootstrap] : [bootstrap]
+            await promisify(execFile)(electronPath, args, {
                 env: { ...process.env, FLUXY_DATA_DIR: join(directory, 'data') },
                 timeout: 15000
             })

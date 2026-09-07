@@ -1,12 +1,20 @@
-import { X509Certificate, createPrivateKey, randomUUID, randomBytes } from 'node:crypto'
-import { readFile, writeFile, mkdtemp, rm } from 'node:fs/promises'
+import 'reflect-metadata'
+import { X509Certificate, createPrivateKey, randomUUID, randomBytes, webcrypto } from 'node:crypto'
 import { existsSync, readFileSync, writeFileSync, renameSync } from 'node:fs'
 import { join } from 'node:path'
 import { isIP } from 'node:net'
-import { execFile } from 'node:child_process'
-import { promisify } from 'node:util'
 import { z } from 'zod'
 import forge from 'node-forge'
+import {
+    X509Certificate as IssuerCertificate,
+    X509CertificateGenerator,
+    BasicConstraintsExtension,
+    KeyUsagesExtension,
+    KeyUsageFlags,
+    ExtendedKeyUsageExtension,
+    ExtendedKeyUsage,
+    SubjectAlternativeNameExtension
+} from '@peculiar/x509'
 import type { Store } from './store'
 import { matchPattern } from '../shared/model'
 
@@ -183,72 +191,64 @@ export class CustomCertificates {
         const cached = this.cache.get(key)
         if (cached) return cached
         if (!/^[a-zA-Z0-9.:-]{1,253}$/.test(host)) throw new Error('Invalid certificate hostname')
-        const temp = await mkdtemp(join(this.store.directory, 'issuer-'))
-        try {
-            await writeFile(join(temp, 'ca.pem'), root.certificate, { mode: 0o600 })
-            await writeFile(join(temp, 'ca.key'), this.decrypt(root.encryptedKey), { mode: 0o600 })
-            await writeFile(
-                join(temp, 'extensions.cnf'),
-                `basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth\nsubjectAltName=${host.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(host) ? 'IP' : 'DNS'}:${host}\n`,
-                { mode: 0o600 }
-            )
-            const run = promisify(execFile)
-            await run(
-                '/usr/bin/openssl',
-                [
-                    'req',
-                    '-new',
-                    '-newkey',
-                    'rsa:2048',
-                    '-nodes',
-                    '-keyout',
-                    'leaf.key',
-                    '-out',
-                    'leaf.csr',
-                    '-subj',
-                    `/CN=${host}`
-                ],
-                { cwd: temp, timeout: 20000 }
-            )
-            await run(
-                '/usr/bin/openssl',
-                [
-                    'x509',
-                    '-req',
-                    '-in',
-                    'leaf.csr',
-                    '-CA',
-                    'ca.pem',
-                    '-CAkey',
-                    'ca.key',
-                    '-set_serial',
-                    `0x${randomBytes(16).toString('hex')}`,
-                    '-out',
-                    'leaf.pem',
-                    '-days',
-                    String(
-                        Math.max(
-                            1,
-                            Math.min(
-                                365,
-                                Math.floor((Date.parse(root.expires) - Date.now()) / 86400000)
-                            )
-                        )
+        const issuer = new IssuerCertificate(root.certificate)
+        const algorithm = { ...issuer.publicKey.algorithm, hash: 'SHA-256' }
+        const signingKey = await webcrypto.subtle.importKey(
+            'pkcs8',
+            createPrivateKey(this.decrypt(root.encryptedKey)).export({
+                type: 'pkcs8',
+                format: 'der'
+            }),
+            algorithm,
+            false,
+            ['sign']
+        )
+        const keys = await webcrypto.subtle.generateKey(
+            {
+                name: 'RSASSA-PKCS1-v1_5',
+                hash: 'SHA-256',
+                modulusLength: 2048,
+                publicExponent: new Uint8Array([1, 0, 1])
+            },
+            true,
+            ['sign', 'verify']
+        )
+        const leaf = await X509CertificateGenerator.create(
+            {
+                serialNumber: '01' + randomBytes(16).toString('hex'),
+                subject: `CN=${host}`,
+                issuer: issuer.subjectName,
+                notBefore: new Date(),
+                notAfter: new Date(Math.min(Date.parse(root.expires), Date.now() + 365 * 86400000)),
+                publicKey: keys.publicKey,
+                signingKey,
+                signingAlgorithm: algorithm,
+                extensions: [
+                    new BasicConstraintsExtension(false, undefined, true),
+                    new KeyUsagesExtension(
+                        KeyUsageFlags.digitalSignature | KeyUsageFlags.keyEncipherment,
+                        true
                     ),
-                    '-extfile',
-                    'extensions.cnf'
-                ],
-                { cwd: temp, timeout: 20000 }
-            )
-            const result = {
-                certificate: (await readFile(join(temp, 'leaf.pem'), 'utf8')) + root.certificate,
-                key: await readFile(join(temp, 'leaf.key'), 'utf8')
-            }
-            if (this.cache.size >= 1000) this.cache.delete(this.cache.keys().next().value!)
-            this.cache.set(key, result)
-            return result
-        } finally {
-            await rm(temp, { recursive: true, force: true })
+                    new ExtendedKeyUsageExtension([ExtendedKeyUsage.serverAuth]),
+                    new SubjectAlternativeNameExtension([
+                        { type: isIP(host) ? 'ip' : 'dns', value: host }
+                    ])
+                ]
+            },
+            webcrypto as Crypto
+        )
+        const result = {
+            certificate: leaf.toString('pem') + '\n' + root.certificate,
+            key: createPrivateKey({
+                key: Buffer.from(await webcrypto.subtle.exportKey('pkcs8', keys.privateKey)),
+                type: 'pkcs8',
+                format: 'der'
+            })
+                .export({ type: 'pkcs8', format: 'pem' })
+                .toString()
         }
+        if (this.cache.size >= 1000) this.cache.delete(this.cache.keys().next().value!)
+        this.cache.set(key, result)
+        return result
     }
 }

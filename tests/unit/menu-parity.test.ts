@@ -2,13 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, rm, readFile, writeFile, readdir, symlink, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { X509Certificate, createPrivateKey } from 'node:crypto'
+import { X509Certificate, createPrivateKey, webcrypto } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 import { writePrivateFile } from '../../src/main/private-files'
 import { terminalEnvironment } from '../../src/shared/setup'
 import { Store } from '../../src/main/store'
 import { ProjectStore } from '../../src/main/projects'
 import { CustomCertificates } from '../../src/main/custom-certificates'
+import { X509CertificateGenerator, BasicConstraintsExtension } from '@peculiar/x509'
 import { ensureCertificate } from '../../src/main/certificates'
 import { compileProtobuf, decodeProtobuf } from '../../src/main/protobuf'
 import { GistService } from '../../src/main/gist'
@@ -236,6 +237,54 @@ it('persists encrypted certificate identities and issues matching trusted leaves
     expect(loaded.list()).toHaveLength(1)
 })
 
+it.each(['P-256', 'P-384', 'P-521'])(
+    'issues trusted DNS and IP leaves from an imported %s root',
+    async (namedCurve) => {
+        const algorithm = { name: 'ECDSA', namedCurve, hash: 'SHA-256' }
+        const keys = await webcrypto.subtle.generateKey(algorithm, true, ['sign', 'verify'])
+        // Less than one day remaining must never produce a leaf outliving the issuer.
+        const expires = new Date(Date.now() + 3600000)
+        const root = await X509CertificateGenerator.createSelfSigned(
+            {
+                name: 'CN=EC Test CA, O=Fluxy',
+                keys,
+                signingAlgorithm: algorithm,
+                notBefore: new Date(Date.now() - 60000),
+                notAfter: expires,
+                extensions: [new BasicConstraintsExtension(true, undefined, true)]
+            },
+            webcrypto as Crypto
+        )
+        const pem = root.toString('pem')
+        const privateKey = createPrivateKey({
+            key: Buffer.from(await webcrypto.subtle.exportKey('pkcs8', keys.privateKey)),
+            type: 'pkcs8',
+            format: 'der'
+        }).export({ type: 'pkcs8', format: 'pem' })
+        const certificates = new CustomCertificates(
+            new Store(directory),
+            (v) => v,
+            (v) => v
+        )
+        certificates.import(
+            { kind: 'root', name: 'EC CA', host: '' },
+            [Buffer.from(pem), Buffer.from(privateKey)],
+            false
+        )
+        for (const host of ['example.com', '127.0.0.1', '::1']) {
+            const identity = await certificates.server(host)
+            const leaf = new X509Certificate(identity.certificate)
+            expect(leaf.verify(new X509Certificate(pem).publicKey)).toBe(true)
+            expect(leaf.checkPrivateKey(createPrivateKey(identity.key))).toBe(true)
+            expect(host === 'example.com' ? leaf.checkHost(host) : leaf.checkIP(host)).toBe(host)
+            expect(leaf.ca).toBe(false)
+            expect(leaf.keyUsage).toContain('1.3.6.1.5.5.7.3.1')
+            expect(Date.parse(leaf.validTo)).toBeLessThanOrEqual(expires.getTime())
+            expect(await certificates.server(host)).toBe(identity)
+        }
+    }
+)
+
 it('exports private material without following existing symlinks', async () => {
     const original = join(directory, 'original'),
         target = join(directory, 'export.pem')
@@ -244,7 +293,8 @@ it('exports private material without following existing symlinks', async () => {
     await writePrivateFile(target, 'private key')
     expect(await readFile(original, 'utf8')).toBe('original')
     expect(await readFile(target, 'utf8')).toBe('private key')
-    expect((await stat(target)).mode & 0o777).toBe(0o600)
+    // Windows exposes writable files as 0666; POSIX mode bits do not represent its ACL.
+    if (process.platform !== 'win32') expect((await stat(target)).mode & 0o777).toBe(0o600)
 })
 it('quotes terminal environment values without changing shell profiles', () => {
     const script = terminalEnvironment(6060, "/tmp/test's cert.pem")
