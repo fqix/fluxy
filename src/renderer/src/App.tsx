@@ -200,6 +200,7 @@ export function App() {
     const [composeTransaction, setComposeTransaction] = useState<Transaction>()
     const [workspaceName, setWorkspaceName] = useState('')
     const menuCommand = useRef<(command: MenuCommand) => void>(() => {})
+    const [pendingMenuCommands, setPendingMenuCommands] = useState<MenuCommand[]>([])
     const [sessionName, setSessionName] = useState('Untitled Session')
     const [focusName, setFocusName] = useState('')
     const [focusSets, setFocusSets] = useState<
@@ -316,7 +317,7 @@ export function App() {
                 })
                 return
             }
-            menuCommand.current(event.command)
+            setPendingMenuCommands((commands) => [...commands, event.command])
         })
     }, [refresh, run, openTool, addWorkspace])
     useEffect(() => {
@@ -965,6 +966,19 @@ export function App() {
                 if ((toolCommands as readonly string[]).includes(command)) openTool(command)
         }
     }
+    useEffect(() => {
+        if (!pendingMenuCommands.length) return
+        // A click can arrive before the main process receives our busy state.
+        // Keep it until the active operation settles, then process one command
+        // per render so subsequent commands see the resulting busy/modal state.
+        if (tool || !snapshot) {
+            setPendingMenuCommands([])
+            return
+        }
+        if (busy > 0) return
+        setPendingMenuCommands((commands) => commands.slice(1))
+        menuCommand.current(pendingMenuCommands[0])
+    }, [pendingMenuCommands, busy, tool, snapshot])
     const menuState: MenuState = {
         projects: snapshot?.projects.projects.map((p) => ({ id: p.id, name: p.name })) ?? [],
         activeProjectID: snapshot?.projects.activeID,

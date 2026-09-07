@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
-import { mkdtemp, rm, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import http from 'node:http'
@@ -212,6 +212,112 @@ test('native menu controls workspaces, views, traffic, selection and dialogs', a
         await app.close()
         server.closeAllConnections()
         await new Promise<void>((resolve) => server.close(() => resolve()))
+        await rm(directory, { recursive: true, force: true })
+    }
+})
+
+test('menu commands already in transit wait for an active operation to finish', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'fluxy-menu-inflight-'))
+    const app = await electron.launch({
+        args: process.env.FLUXY_TEST_EXECUTABLE ? [] : ['.'],
+        ...(process.env.FLUXY_TEST_EXECUTABLE
+            ? { executablePath: process.env.FLUXY_TEST_EXECUTABLE }
+            : {}),
+        env: { ...process.env, FLUXY_DATA_DIR: directory }
+    })
+    const releaseCopy = () =>
+        app.evaluate(() => {
+            const hooks = globalThis as typeof globalThis & { releaseMenuCopy?: () => void }
+            hooks.releaseMenuCopy?.()
+            delete hooks.releaseMenuCopy
+        })
+    try {
+        const page = await app.firstWindow()
+        await page
+            .getByRole('dialog', { name: 'Welcome to Fluxy' })
+            .getByRole('button', { name: 'Close', exact: true })
+            .click()
+        // Import a local transaction without relying on network timing.
+        const harPath = join(directory, 'request.har')
+        await writeFile(
+            harPath,
+            JSON.stringify({
+                log: {
+                    entries: [
+                        {
+                            startedDateTime: new Date().toISOString(),
+                            time: 1,
+                            request: {
+                                method: 'GET',
+                                url: 'http://example.test/menu',
+                                headers: []
+                            },
+                            response: {
+                                status: 200,
+                                headers: [],
+                                content: { text: 'menu response' }
+                            }
+                        }
+                    ]
+                }
+            })
+        )
+        await app.evaluate(({ dialog }, filePath) => {
+            dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
+            dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false })
+        }, harPath)
+        await click(app, 'import')
+        await expect(page.locator('tr[data-request-id]')).toHaveCount(1)
+        await click(app, 'last-request')
+        await expect.poll(async () => (await state(app, 'copy-url')).enabled).toBe(true)
+        await app.evaluate(({ ipcMain, clipboard }) => {
+            ipcMain.removeHandler('fluxy:copy')
+            ipcMain.handle('fluxy:copy', async (_event, text: string) => {
+                clipboard.writeText(text)
+                await new Promise<void>((resolve) => {
+                    const hooks = globalThis as typeof globalThis & { releaseMenuCopy?: () => void }
+                    hooks.releaseMenuCopy = resolve
+                })
+            })
+        })
+        for (const command of ['pin', 'Help']) {
+            await click(app, 'copy-url')
+            await expect.poll(async () => (await state(app, 'copy-url')).enabled).toBe(false)
+            // Simulate a click sent before the renderer's busy state reached the
+            // main process, but delivered after the copy operation started.
+            await app.evaluate(({ BrowserWindow }, command) => {
+                BrowserWindow.getAllWindows()[0].webContents.send('fluxy:event', {
+                    type: 'command',
+                    command
+                })
+            }, command)
+            await expect(page.getByRole('dialog', { name: 'Help', exact: true })).toHaveCount(0)
+            if (command === 'pin') {
+                expect(
+                    await page.evaluate(
+                        async () => (await window.fluxy.snapshot()).transactions[0].pinned
+                    )
+                ).toBe(false)
+            }
+            await releaseCopy()
+            if (command === 'pin') {
+                await expect
+                    .poll(() =>
+                        page.evaluate(
+                            async () => (await window.fluxy.snapshot()).transactions[0].pinned
+                        )
+                    )
+                    .toBe(true)
+                await expect.poll(async () => (await state(app, 'pin')).checked).toBe(true)
+            } else {
+                await expect(page.getByRole('dialog', { name: 'Help', exact: true })).toContainText(
+                    'Inspect traffic with Fluxy'
+                )
+            }
+        }
+    } finally {
+        await releaseCopy()
+        await app.close()
         await rm(directory, { recursive: true, force: true })
     }
 })
