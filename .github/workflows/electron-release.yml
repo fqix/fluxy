@@ -34,21 +34,21 @@ jobs:
       FLUXY_BUILD_PLATFORM: ${{ matrix.platform }}
       FLUXY_BUILD_ARCH: ${{ matrix.arch }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           architecture: ${{ matrix.arch }}
           cache: npm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.27.1'
           cache-dependency-path: |
             tools/sing-box/go.sum
             tools/helper/go.sum
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
       - name: Validate native build architecture
@@ -100,7 +100,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node tools/publish-electron-release.mjs --prepare
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: installers-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
@@ -111,11 +111,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: release-artifacts
           pattern: installers-*
