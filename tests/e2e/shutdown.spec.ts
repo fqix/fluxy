@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { executableName } from '../../src/main/helper-platform'
 
 const electronPath = createRequire(join(process.cwd(), 'package.json'))('electron') as string
 const resources = process.env.FLUXY_TEST_EXECUTABLE
@@ -12,8 +13,11 @@ const resources = process.env.FLUXY_TEST_EXECUTABLE
     : undefined
 const appPath = resources ? join(resources, 'app.asar') : process.cwd()
 
-for (const phase of ['fluxy-helper.json', 'fluxy-core.build.json']) {
-    test(`quit during ${phase} initialization waits and cleans up partial services`, async () => {
+for (const phase of [
+    `${executableName('fluxy-helper')}.json`,
+    `${executableName('fluxy-core')}.build.json`
+]) {
+    test(`quit during ${phase} initialization waits and cleans up partial services`, async ({}, testInfo) => {
         const directory = await mkdtemp(join(tmpdir(), 'fluxy-early-quit-'))
         const report = join(directory, 'events.json')
         const bootstrap = join(directory, 'bootstrap.cjs')
@@ -74,6 +78,12 @@ require(${JSON.stringify(join(appPath, 'out/main/index.js'))})
                 'initialization-finished',
                 'quit'
             ])
+        } catch (error) {
+            await testInfo.attach('initialization-events', {
+                body: await readFile(report).catch(() => Buffer.from('[]')),
+                contentType: 'application/json'
+            })
+            throw error
         } finally {
             await rm(directory, { recursive: true, force: true })
         }
