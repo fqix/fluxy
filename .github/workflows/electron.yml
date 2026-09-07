@@ -8,6 +8,7 @@ on:
         'tests/**',
         'resources/**',
         'tools/sing-box/**',
+        'tools/whistle/**',
         'build-electron-core.mjs',
         'build-electron-helper.mjs',
         'tools/helper/**',
@@ -16,6 +17,7 @@ on:
         'install.sh',
         'install.ps1',
         'third_party/sing-box',
+        'third_party/whistle',
         'package*.json',
         '*config.ts',
         '.github/workflows/electron.yml'
@@ -27,6 +29,7 @@ on:
         'tests/**',
         'resources/**',
         'tools/sing-box/**',
+        'tools/whistle/**',
         'build-electron-core.mjs',
         'build-electron-helper.mjs',
         'tools/helper/**',
@@ -35,6 +38,7 @@ on:
         'install.sh',
         'install.ps1',
         'third_party/sing-box',
+        'third_party/whistle',
         'package*.json',
         '*config.ts',
         '.github/workflows/electron.yml'
@@ -79,6 +83,7 @@ jobs:
       - run: go vet ./...
         working-directory: tools/helper
       - run: npm test
+      - run: npm run test:protocol
       - run: powershell -NoProfile -File tools/install/test-windows.ps1
         if: runner.os == 'Windows'
       - run: go test -race -tags=with_gvisor ./...

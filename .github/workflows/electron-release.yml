@@ -83,6 +83,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
       - run: npm test
+      - run: npm run test:protocol
       - run: npm run build
       # The upstream Intel Electron development app is unsigned. The helper's
       # native caller authentication must be exercised against the signed package.

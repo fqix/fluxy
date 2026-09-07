@@ -342,6 +342,18 @@ describe('real proxy traffic', () => {
         expect((await pending).status).toBe(503)
         expect(hits).toHaveLength(0)
     })
+    it('aborts a response breakpoint without hanging the client', async () => {
+        store.rules = [rule('breakpoint', { phase: 'response' })]
+        const pending = request('/response-abort')
+        await waitFor(() =>
+            [...engine.transactions.values()].some((t) => t.breakpointPhase === 'response')
+        )
+        const transaction = [...engine.transactions.values()][0]
+        engine.resolveBreakpoint(transaction.id, 'abort')
+        expect((await pending).status).toBe(503)
+        expect(transaction.state).toBe('blocked')
+        expect(hits).toHaveLength(1)
+    })
     it('edits a buffered POST and then its response at two-phase breakpoints', async () => {
         store.rules = [rule('breakpoint', { phase: 'both' })]
         const pending = request('/original', 'original body', 'POST')
@@ -370,7 +382,10 @@ describe('real proxy traffic', () => {
         expect(result.status).toBe(202)
         expect(result.body).toBe('response edited')
         expect(result.headers['content-length']).not.toBe('999')
-        expect(result.headers['transfer-encoding']).toBe('chunked')
+        expect(
+            result.headers['content-length'] === String(Buffer.byteLength(result.body)) ||
+                result.headers['transfer-encoding'] === 'chunked'
+        ).toBe(true)
         expect(t.state).toBe('completed')
         expect(t.responseBody).toBe('response edited')
     })
@@ -625,8 +640,9 @@ describe('real proxy traffic', () => {
             headers: { host: `127.0.0.1:${originPort}` }
         })
         try {
+            const connected = once(wss, 'connection')
             await once(ws, 'open')
-            await once(wss, 'connection')
+            await connected
             expect(Date.now() - started).toBeGreaterThanOrEqual(110)
             const messages: Buffer[] = []
             ws.on('message', (data) => messages.push(Buffer.from(data as Buffer)))

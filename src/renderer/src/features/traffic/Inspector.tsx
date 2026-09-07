@@ -100,6 +100,7 @@ function Pane({
             ? ['Headers', 'Query', 'Body', 'Cookies', 'Raw', 'JSON', 'Hex']
             : [
                   'Headers',
+                  ...(Object.keys(t.responseTrailers ?? {}).length ? ['Trailers'] : []),
                   'Body',
                   'Set-Cookie',
                   'Timeline',
@@ -141,6 +142,8 @@ function Pane({
                     />
                 ) : tab === 'Headers' ? (
                     <HeaderTable values={h} />
+                ) : tab === 'Trailers' ? (
+                    <HeaderTable values={t.responseTrailers ?? {}} />
                 ) : tab === 'Query' ? (
                     <HeaderTable values={[...new URL(t.url).searchParams]} />
                 ) : tab === 'Cookies' || tab === 'Set-Cookie' ? (

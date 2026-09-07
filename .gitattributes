@@ -40,3 +40,6 @@
 
 # PowerShell installers - consistent text on all hosts
 *.ps1 text eol=lf
+
+# Reproducible upstream patches on Windows runners
+*.patch text eol=lf

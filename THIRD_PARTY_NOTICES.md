@@ -1,7 +1,7 @@
 # Third-Party Software Notices
 
 This document describes the dependencies of Fluxy 0.1.0, checked against the
-repository manifests and lockfiles on 2026-09-07. Original Fluxy contributions
+repository manifests and lockfiles on 2026-09-08. Original Fluxy contributions
 use the [MIT License](LICENSE). Third-party components retain their own copyright
 notices and license terms. This inventory does not replace their full license texts.
 
@@ -21,7 +21,7 @@ retained when distributing them.
 | `@peculiar/x509`            | 2.1.0          | MIT                       |
 | `builder-util-runtime`      | 9.7.0          | MIT                       |
 | `electron-updater`          | 6.8.9          | MIT                       |
-| `http-mitm-proxy`           | 1.1.0          | MIT                       |
+| `ws`                        | 8.21.3         | MIT                       |
 | `lucide-react`              | 0.577.0        | ISC                       |
 | `node-forge`                | 1.4.0          | (BSD-3-Clause OR GPL-2.0) |
 | `protobufjs`                | 8.8.0          | BSD-3-Clause              |
@@ -63,6 +63,29 @@ with the application. Preserve Electron's bundled `LICENSE` and
 `LICENSES.chromium.html`, including the notices for Chromium, Node.js and their
 third-party components. Build and test dependencies are listed for source-build
 attribution; this table does not imply they are all shipped in the desktop app.
+
+## Embedded Whistle proxy
+
+Whistle **2.10.9**, copyright its upstream authors, is distributed under the
+MIT License. Its source is pinned at revision
+`8d9ee8f5f30aff67e72cb2a8972bc5a0804bf25c` in
+[third_party/whistle](third_party/whistle), with the upstream license in
+[LICENSE](third_party/whistle/LICENSE).
+
+Fluxy applies the patches in [tools/whistle/patches](tools/whistle/patches) to a
+build copy: headless embedding, custom certificate/timing hooks, and preservation
+of gRPC trailers-only error metadata through HTTP/2 conversion. The submodule
+remains unmodified. Runtime dependencies, including `ws` and `proxy-agent`, are
+resolved by [tools/whistle/package-lock.json](tools/whistle/package-lock.json).
+Their package metadata and license files are shipped under `whistle/node_modules`;
+Whistle's license ships under `whistle/upstream/LICENSE`. The generated
+`whistle/manifest.json` records source revision, patch and lockfile checksums,
+source/dependency tree checksums, and the child entrypoint checksum.
+
+Protocol tests additionally use `@grpc/grpc-js` (Apache-2.0),
+`https-proxy-agent` (MIT) and `tsx` (MIT). `esbuild` (MIT) bundles the child
+entrypoint. These tools are development dependencies, not an additional proxy
+service shipped to users.
 
 ## Cross-platform Go Helper
 
