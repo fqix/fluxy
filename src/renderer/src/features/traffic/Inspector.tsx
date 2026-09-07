@@ -31,9 +31,19 @@ function Body({
                 <img src={`data:${contentType};base64,${base64}`} />
             </div>
         )
+    // Binary payloads only survive intact in base64; the text field is a lossy UTF-8 view.
+    // Raw prepends the status/header block, so it stays measured as the text it renders.
+    let data: Uint8Array
+    try {
+        data =
+            base64 && tab !== 'Raw'
+                ? Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+                : new TextEncoder().encode(text)
+    } catch {
+        data = new TextEncoder().encode(text)
+    }
     let value = tab === 'JSON' || tab === 'Body' || tab === 'Preview' ? pretty(text) : text
     if (tab === 'Hex') {
-        const data = new TextEncoder().encode(text)
         value = Array.from(
             { length: Math.ceil(Math.min(data.length, 65536) / 16) },
             (_, i) =>
@@ -44,7 +54,9 @@ function Body({
     return (
         <>
             <div className="body-tools">
-                <span>{bytes(new TextEncoder().encode(text).length)} · UTF-8</span>
+                <span>
+                    {bytes(data.length)} · {base64 && tab !== 'Raw' ? 'binary' : 'UTF-8'}
+                </span>
                 <Input
                     aria-label="Find in payload"
                     placeholder="Find in payload…"
@@ -194,7 +206,7 @@ function Pane({
                                       .join('\n')}\n\n${body}`
                                 : body
                         }
-                        base64={request ? undefined : t.responseBase64}
+                        base64={request ? t.requestBase64 : t.responseBase64}
                         contentType={h['content-type']}
                     />
                 )}
