@@ -436,7 +436,7 @@ export function contentKind(t: Transaction): string {
     if (t.frames.length || t.protocol === 'WebSocket') return 'WebSocket'
     if (
         [t.requestHeaders['content-type'], t.responseHeaders['content-type']].some((ct) =>
-            /^application\/grpc(?:[+;\s]|$|-web(?:[+;\s]|$|text(?:[+;\s]|$)))/i.test(ct ?? '')
+            /^application\/grpc(?:[+;\s]|$|-web(?:[+;\s]|$|-?text(?:[+;\s]|$)))/i.test(ct ?? '')
         )
     )
         return 'gRPC'

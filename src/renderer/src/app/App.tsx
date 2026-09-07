@@ -90,6 +90,7 @@ import { NetworkConditions } from '@/features/capture/NetworkConditions'
 import { DiffView } from '@/features/diff/DiffView'
 import { AdvancedFilters } from '@/features/filters/AdvancedFilters'
 import type { FilterRule } from '@shared/traffic/filters'
+import { grpcWebTrailers } from '@shared/traffic/protocols'
 import icon from '@assets/icon.png'
 
 type Workspace = {
@@ -158,7 +159,9 @@ function filterMatch(t: Transaction, filter: string) {
         return (
             (/"jsonrpc"\s*:/.test(t.requestBody) && /"error"\s*:/.test(t.responseBody)) ||
             (contentKind(t) === 'gRPC' &&
-                /^(?:[1-9]|1[0-6])$/.test(t.responseHeaders['grpc-status'] ?? ''))
+                /^(?:[1-9]|1[0-6])$/.test(
+                    grpcWebTrailers(t)['grpc-status'] ?? t.responseHeaders['grpc-status'] ?? ''
+                ))
         )
     return contentKind(t) === filter
 }
