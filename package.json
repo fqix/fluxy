@@ -155,7 +155,8 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://github.com/fqix/fluxy/releases/download/electron-stable-${arch}/"
+        "url": "https://github.com/fqix/fluxy/releases/latest/download/",
+        "channel": "latest-${arch}"
       }
     ],
     "artifactName": "Fluxy-${version}-${os}-${arch}.${ext}",

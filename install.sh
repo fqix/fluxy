@@ -11,7 +11,7 @@ Usage: bash install.sh [--version VERSION] [--arch x64|arm64] [--format deb|rpm]
 Downloads Fluxy from github.com/fqix/fluxy and verifies its SHA-256 checksum.
 macOS: installs to ~/Applications/Fluxy.app. Linux: uses apt-get, dnf, yum or zypper.
 --version accepts latest (default), 0.1.0, or v0.1.0.
---dry-run prints the selected release URLs without downloading or installing.
+--dry-run resolves latest and prints URLs without downloading packages or installing.
 HELP
 }
 fail() { printf 'Fluxy: %s\n' "$*" >&2; exit 1; }
@@ -54,15 +54,16 @@ else
 fi
 version=${version#v}
 if [ "$version" = latest ]; then
-    tag="electron-stable-$arch"
-    artifact="Fluxy-$platform-$arch.$format"
-else
-    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || fail 'Invalid release version.'
-    tag="v$version"
-    package_arch=$arch
-    case "$format:$arch" in deb:x64) package_arch=amd64;; rpm:x64) package_arch=x86_64;; rpm:arm64) package_arch=aarch64;; esac
-    artifact="Fluxy-$version-$platform-$package_arch.$format"
+    command -v curl >/dev/null 2>&1 || fail 'curl is required.'
+    latest_url=$(curl --fail --silent --show-error --head --location --proto '=https' --proto-redir '=https' --tlsv1.2 --connect-timeout 15 --max-time 60 --output /dev/null --write-out '%{url_effective}' https://github.com/fqix/fluxy/releases/latest) || fail 'Could not resolve the latest release.'
+    [[ "$latest_url" == https://github.com/fqix/fluxy/releases/tag/v* ]] || fail 'Unexpected latest release URL.'
+    version=${latest_url##*/v}
 fi
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || fail 'Invalid release version.'
+tag="v$version"
+package_arch=$arch
+case "$format:$arch" in deb:x64) package_arch=amd64;; rpm:x64) package_arch=x86_64;; rpm:arm64) package_arch=aarch64;; esac
+artifact="Fluxy-$version-$platform-$package_arch.$format"
 url="https://github.com/fqix/fluxy/releases/download/$tag/$artifact"
 printf 'Fluxy: %s / %s / %s\n%s\n%s.sha256\n' "$platform" "$arch" "$format" "$url" "$url"
 [ "$dry_run" = 0 ] || exit 0

@@ -7,7 +7,8 @@ $global:FluxyTestCorrupt = $false
 $global:FluxyTestPayload = [Text.Encoding]::UTF8.GetBytes('harmless installer fixture')
 $global:FluxyTestHash = ([BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash($global:FluxyTestPayload))).Replace('-', '')
 function Invoke-WebRequest {
-    param($Uri, $OutFile, $TimeoutSec, [switch]$UseBasicParsing)
+    param($Uri, $OutFile, $TimeoutSec, $Method, [switch]$UseBasicParsing)
+    if ($Method -eq 'Head') { return [PSCustomObject]@{ BaseResponse = [PSCustomObject]@{ ResponseUri = [Uri]'https://github.com/fqix/fluxy/releases/tag/v0.1.0' } } }
     if ($Uri.EndsWith('.sha256')) { [IO.File]::WriteAllText($OutFile, $global:FluxyTestHash + '  fixture.exe') }
     elseif ($global:FluxyTestCorrupt) { [IO.File]::WriteAllText($OutFile, 'corrupt') }
     else { [IO.File]::WriteAllBytes($OutFile, $global:FluxyTestPayload) }
@@ -19,7 +20,7 @@ function Start-Process {
     return [PSCustomObject]@{ExitCode = 0}
 }
 $output = & $installerScript -Arch arm64 -DryRun
-if (($output -join "`n") -notmatch 'electron-stable-arm64/Fluxy-win-arm64.exe') { throw 'Incorrect ARM64 download URL' }
+if (($output -join "`n") -notmatch '/releases/download/v0.1.0/Fluxy-0.1.0-win-arm64.exe') { throw 'Incorrect ARM64 download URL' }
 if ($global:FluxyTestCalls -ne 0) { throw 'Dry-run launched an installer' }
 foreach ($version in @('0.1.0', 'v0.1.0')) {
     $output = & $installerScript -Version $version -Arch x64 -DryRun

@@ -43,15 +43,18 @@ Both scripts detect x64 or arm64 and allow an explicit override. The requested p
 
 The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packages. The release matrix covers macOS arm64, Linux x64/arm64, and Windows x64/arm64. Each runner builds its native architecture, with explicit architecture selection for Node.js, the core, the Helper and Electron packaging. Linux ARM64 uses `ubuntu-24.04-arm`; Windows ARM64 uses `windows-11-arm`. The final publish job runs only when all platform builds succeed. macOS uses Developer ID signing and notarization when all five Apple signing secrets are configured, or ad-hoc signing without notarization when none are configured. Partial configuration fails the build; Windows accepts optional `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` signing secrets.
 
-`tools/publish-electron-release.mjs --prepare` creates per-file SHA-256 sidecars, stable aliases, and a release plan without uploading anything. The aggregate `--publish release-artifacts` step uploads:
+`tools/publish-electron-release.mjs --prepare` creates per-file SHA-256 sidecars and a release plan, and collects updater metadata without uploading anything. The aggregate `--publish release-artifacts` step uploads:
 
 - Versioned assets under `vVERSION`, such as `Fluxy-0.1.0-linux-amd64.deb` and its `.sha256` sidecar.
-- Stable aliases under `electron-stable-ARCH`, such as `Fluxy-linux-x64.deb` and its `.sha256` sidecar.
-- Versioned-release metadata named `latest-OS-ARCH.yml` (for example, `latest-win-arm64.yml`), so architectures cannot overwrite each other.
-- Versioned updater packages followed by metadata in each architecture's stable feed: `latest-mac.yml` on macOS, `latest.yml` on Windows, and `latest-linux.yml` / `latest-linux-arm64.yml` on Linux.
+- Architecture-specific updater metadata in the same release: `latest-x64.yml` / `latest-arm64.yml` on Windows, `latest-arm64-mac.yml` on macOS, and `latest-x64-linux.yml` / `latest-arm64-linux-arm64.yml` on Linux.
+- The two installation scripts, `install.sh` and `install.ps1`.
+
+Only `vVERSION` releases are created. Packaged clients use the generic update URL `https://github.com/fqix/fluxy/releases/latest/download/` with the `latest-ARCH` channel; electron-builder expands the architecture and both builder and updater append the platform suffix. Installation scripts resolve GitHub's latest release redirect, then download the versioned package and checksum from that exact release. Dry runs perform this metadata lookup but do not download packages or install anything; an explicit version skips the lookup.
+
+Clients built before this change still point to the removed architecture feed releases. Those clients need one manual installation of a newer build that uses the new update URL.
 
 The one-line commands become usable after these scripts are pushed to the repository and matching artifacts are publicly accessible. Missing assets, inaccessible/private releases and checksum mismatches cause an explicit failure rather than an attempted installation. A release upload in progress can briefly cause a checksum mismatch; rerun after publishing completes.
 
 ## Verification
 
-`npx vitest run tests/unit/install.test.ts` uses temporary fake downloads and a stubbed sudo command. It covers release aliases/checksums, deb/rpm selection, dry-run, invalid versions, and corrupt-download rejection. On Windows, run `powershell -NoProfile -File tools/install/test-windows.ps1`; it stubs downloading and process launching, so no installer executes. CI includes both suites.
+`npx vitest run tests/unit/install.test.ts` uses temporary fake downloads and a stubbed sudo command. It covers release metadata/checksums, deb/rpm selection, dry-run, invalid versions, and corrupt-download rejection. On Windows, run `powershell -NoProfile -File tools/install/test-windows.ps1`; it stubs downloading and process launching, so no installer executes. CI includes both suites.

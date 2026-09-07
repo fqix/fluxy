@@ -23,19 +23,24 @@ if ($Arch -eq 'auto') {
         default { throw 'Only x64 and arm64 are supported.' }
     }
 }
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $Version = $Version -replace '^v', ''
 if ($Version -eq 'latest') {
-    $tag = "electron-stable-$Arch"
-    $artifact = "Fluxy-win-$Arch.exe"
-} else {
-    if ($Version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$') { throw 'Invalid release version.' }
-    $tag = "v$Version"
-    $artifact = "Fluxy-$Version-win-$Arch.exe"
+    $response = Invoke-WebRequest -UseBasicParsing -Method Head -Uri 'https://github.com/fqix/fluxy/releases/latest' -TimeoutSec 60
+    # Windows PowerShell uses HttpWebResponse; PowerShell 7 uses HttpResponseMessage.
+    $latestUri = $response.BaseResponse.ResponseUri
+    if (!$latestUri) { $latestUri = $response.BaseResponse.RequestMessage.RequestUri }
+    if (!$latestUri -or $latestUri.AbsoluteUri -notmatch '^https://github\.com/fqix/fluxy/releases/tag/v(.+)$') {
+        throw 'Could not resolve the latest release.'
+    }
+    $Version = $Matches[1]
 }
+if ($Version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$') { throw 'Invalid release version.' }
+$tag = "v$Version"
+$artifact = "Fluxy-$Version-win-$Arch.exe"
 $url = "https://github.com/fqix/fluxy/releases/download/$tag/$artifact"
 Write-Output "Fluxy: Windows / $Arch`n$url`n$url.sha256"
 if ($DryRun) { return }
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $work = Join-Path ([IO.Path]::GetTempPath()) ('fluxy-install-' + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $work | Out-Null
 try {

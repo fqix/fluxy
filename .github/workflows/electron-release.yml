@@ -108,7 +108,7 @@ jobs:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: npx electron-builder --win nsis --${{ matrix.arch }} --publish never
-      - name: Prepare installer aliases and checksums
+      - name: Prepare installers and checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: node tools/publish-electron-release.mjs --prepare
@@ -131,7 +131,7 @@ jobs:
         with:
           path: release-artifacts
           pattern: installers-*
-      - name: Publish versioned release and update feeds
+      - name: Publish versioned release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}

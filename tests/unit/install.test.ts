@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -7,6 +7,12 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 // @ts-expect-error Release preparation is a dependency-free Node script.
 import { prepareRelease } from '../../tools/publish-electron-release.mjs'
+import { GenericProvider } from 'electron-updater/out/providers/GenericProvider'
+import { getAppUpdatePublishConfiguration } from 'app-builder-lib/out/publish/PublishManager'
+import { createUpdateInfoTasks } from 'app-builder-lib/out/publish/updateInfoBuilder'
+import { expandMacro } from 'app-builder-lib/out/util/macroExpander'
+import { Arch } from 'builder-util'
+import { Platform } from 'app-builder-lib'
 const execute = promisify(execFile)
 const directories: string[] = []
 const temporary = async () => {
@@ -15,6 +21,7 @@ const temporary = async () => {
     return directory
 }
 afterEach(async () => {
+    vi.unstubAllEnvs()
     await Promise.all(
         directories.splice(0).map((path) => rm(path, { recursive: true, force: true }))
     )
@@ -30,7 +37,7 @@ describe('published installer contract', () => {
                 ['dmg', 'arm64'],
                 ['zip', 'arm64']
             ],
-            'latest-mac.yml'
+            'latest-arm64-mac.yml'
         ],
         [
             'linux',
@@ -40,7 +47,7 @@ describe('published installer contract', () => {
                 ['deb', 'amd64'],
                 ['rpm', 'x86_64']
             ],
-            'latest-linux.yml'
+            'latest-x64-linux.yml'
         ],
         [
             'linux',
@@ -50,12 +57,12 @@ describe('published installer contract', () => {
                 ['deb', 'arm64'],
                 ['rpm', 'aarch64']
             ],
-            'latest-linux-arm64.yml'
+            'latest-arm64-linux-arm64.yml'
         ],
-        ['win32', 'win', 'x64', [['exe', 'x64']], 'latest.yml'],
-        ['win32', 'win', 'arm64', [['exe', 'arm64']], 'latest.yml']
+        ['win32', 'win', 'x64', [['exe', 'x64']], 'latest-x64.yml'],
+        ['win32', 'win', 'arm64', [['exe', 'arm64']], 'latest-arm64.yml']
     ] as const)(
-        'prepares checksums and stable aliases for %s / %s / %s',
+        'prepares checksums and updater metadata for %s / %s / %s',
         async (platform, os, arch, extensions, manifest) => {
             const directory = await temporary()
             for (const [extension, packageArch] of extensions)
@@ -65,19 +72,64 @@ describe('published installer contract', () => {
                 )
             await writeFile(join(directory, manifest), 'version: 0.1.0\n')
             const plan = prepareRelease(directory, '0.1.0', platform, arch)
-            for (const [extension] of extensions) {
-                const alias = `Fluxy-${os}-${arch}.${extension}`
-                const data = await readFile(join(directory, alias))
+            for (const [extension, packageArch] of extensions) {
+                const name = `Fluxy-0.1.0-${os}-${packageArch}.${extension}`
+                const data = await readFile(join(directory, name))
                 const hash = createHash('sha256').update(data).digest('hex')
-                expect(await readFile(join(directory, alias + '.sha256'), 'utf8')).toBe(
-                    `${hash}  ${alias}\n`
+                expect(await readFile(join(directory, name + '.sha256'), 'utf8')).toBe(
+                    `${hash}  ${name}\n`
                 )
-                expect(plan.stable).toContain(alias)
+                expect(plan.versioned).toContain(name)
             }
             expect(plan.manifest).toBe(manifest)
-            expect(plan.versioned).toContain(`latest-${os}-${arch}.yml`)
-            expect(await readFile(join(directory, `latest-${os}-${arch}.yml`), 'utf8')).toBe(
-                'version: 0.1.0\n'
+            expect(plan.versioned).toContain(manifest)
+            // Verify builder configuration/filenames against the real updater for every target.
+            const pkg = JSON.parse(await readFile('package.json', 'utf8'))
+            const appInfo = { version: '0.1.0', updaterCacheDirName: 'fluxy-updater' }
+            const packager = {
+                config: pkg.build,
+                platform: { darwin: Platform.MAC, linux: Platform.LINUX, win32: Platform.WINDOWS }[
+                    platform
+                ],
+                platformSpecificBuildOptions: {},
+                appInfo,
+                info: { appInfo, config: pkg.build },
+                expandMacro: (value: string, resolvedArch: string) =>
+                    expandMacro(value, resolvedArch, appInfo as never),
+                getResource: async () => null
+            }
+            const config = await getAppUpdatePublishConfiguration(
+                packager as never,
+                null,
+                Arch[arch],
+                true
+            )
+            expect(config).toMatchObject({ channel: `latest-${arch}` })
+            const tasks = await createUpdateInfoTasks(
+                {
+                    packager,
+                    target: { outDir: directory },
+                    arch: Arch[arch],
+                    file: join(
+                        directory,
+                        `Fluxy-0.1.0-${os}-${extensions[0][1]}.${extensions[0][0]}`
+                    )
+                } as never,
+                [config!]
+            )
+            expect(tasks.map((task) => task.file)).toEqual([join(directory, manifest)])
+            vi.stubEnv('TEST_UPDATER_ARCH', arch)
+            const provider = new GenericProvider(
+                config as never,
+                {} as never,
+                { platform } as never
+            )
+            const request = vi
+                .spyOn(provider as any, 'httpRequest')
+                .mockResolvedValue('version: 0.1.0\n')
+            await provider.getLatestVersion()
+            expect((request.mock.calls[0][0] as URL).href).toBe(
+                `https://github.com/fqix/fluxy/releases/latest/download/${manifest}`
             )
         }
     )
@@ -87,16 +139,15 @@ describe('published installer contract', () => {
             const directory = await temporary()
             await writeFile(join(directory, `Fluxy-0.1.0-win-${arch}.exe`), arch)
             const metadata = `version: 0.1.0\npath: Fluxy-0.1.0-win-${arch}.exe\n`
-            await writeFile(join(directory, 'latest.yml'), metadata)
+            await writeFile(join(directory, `latest-${arch}.yml`), metadata)
             const plan = prepareRelease(directory, '0.1.0', 'win32', arch)
             assets.push(...plan.versioned)
-            expect(plan.manifest).toBe('latest.yml')
-            expect(await readFile(join(directory, `latest-win-${arch}.yml`), 'utf8')).toBe(metadata)
-            expect(await readFile(join(directory, 'latest.yml'), 'utf8')).toBe(metadata)
+            expect(plan.manifest).toBe(`latest-${arch}.yml`)
+            expect(await readFile(join(directory, `latest-${arch}.yml`), 'utf8')).toBe(metadata)
         }
         expect(new Set(assets).size).toBe(assets.length)
-        expect(assets).toContain('latest-win-x64.yml')
-        expect(assets).toContain('latest-win-arm64.yml')
+        expect(assets).toContain('latest-x64.yml')
+        expect(assets).toContain('latest-arm64.yml')
     })
     it('requires both Linux package formats and never prepares AppImage', async () => {
         const directory = await temporary()
@@ -129,7 +180,7 @@ describe.skipIf(process.platform === 'win32')(
             const commands = {
                 uname: `#!/bin/bash\nif [ "$1" = -s ]; then echo Linux; else echo ${arch === 'arm64' ? 'aarch64' : 'x86_64'}; fi\n`,
                 id: '#!/bin/bash\necho 1000\n',
-                curl: `#!/bin/bash\nwhile [ "$#" -gt 0 ]; do if [ "$1" = --output ]; then destination=$2; shift 2; else url=$1; shift; fi; done\ncase "$url" in *.sha256) cp "$FIXTURE/checksum" "$destination";; *) cp "$FIXTURE/payload" "$destination"; ${tamper ? 'echo altered >> "$destination"' : ':'};; esac\n`,
+                curl: `#!/bin/bash\nwhile [ "$#" -gt 0 ]; do if [ "$1" = --output ]; then destination=$2; shift 2; else url=$1; shift; fi; done\ncase "$url" in */releases/latest) echo "\${FIXTURE_LATEST_URL:-https://github.com/fqix/fluxy/releases/tag/v0.1.0}";; *.sha256) cp "$FIXTURE/checksum" "$destination";; *) cp "$FIXTURE/payload" "$destination"; ${tamper ? 'echo altered >> "$destination"' : ':'};; esac\n`,
                 sha256sum: '#!/bin/bash\nshasum -a 256 "$@"\n',
                 sudo: '#!/bin/bash\nprintf "%s\\n" "$@" > "$FIXTURE/privileged-arguments"\n',
                 ...(format === 'deb'
@@ -181,6 +232,15 @@ describe.skipIf(process.platform === 'win32')(
                 await execute('/bin/bash', ['-n', '-c', script])
             }
         )
+        it('rejects unexpected latest release redirects before installation', async () => {
+            const { directory, env } = await fixture('deb')
+            await expect(
+                execute('/bin/bash', ['install.sh', '--format', 'deb'], {
+                    env: { ...env, FIXTURE_LATEST_URL: 'https://example.com/v0.1.0' }
+                })
+            ).rejects.toThrow('Unexpected latest release URL')
+            await expect(readFile(join(directory, 'privileged-arguments'))).rejects.toThrow()
+        })
         it('does not elevate when a download is corrupt', async () => {
             const { directory, env } = await fixture('deb', true)
             await expect(
@@ -188,14 +248,14 @@ describe.skipIf(process.platform === 'win32')(
             ).rejects.toThrow('Checksum mismatch')
             await expect(readFile(join(directory, 'privileged-arguments'))).rejects.toThrow()
         })
-        it('dry-run performs no download and rejects malicious versions', async () => {
+        it('dry-run resolves latest without downloading packages and rejects malicious versions', async () => {
             const { directory, env } = await fixture('deb')
             const { stdout } = await execute(
                 '/bin/bash',
                 ['install.sh', '--dry-run', '--arch', 'arm64', '--format', 'deb'],
                 { env }
             )
-            expect(stdout).toContain('electron-stable-arm64/Fluxy-linux-arm64.deb')
+            expect(stdout).toContain('/releases/download/v0.1.0/Fluxy-0.1.0-linux-arm64.deb')
             await expect(readFile(join(directory, 'privileged-arguments'))).rejects.toThrow()
             await expect(
                 execute(
