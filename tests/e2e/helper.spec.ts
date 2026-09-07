@@ -108,7 +108,11 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         let welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
         await expect(welcome.getByRole('status')).toHaveText('0 of 4 complete')
         await welcome.getByRole('button', { name: 'Install Helper', exact: true }).click()
-        await expect(welcome.getByRole('status')).toHaveText('1 of 4 complete')
+        // Installing copies and verifies the bundled binaries before starting the helper.
+        // Cold Intel runners can exceed Playwright's default five-second assertion limit.
+        await expect(welcome.getByRole('status')).toHaveText('1 of 4 complete', {
+            timeout: 20000
+        })
         expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
         helperPID = await app.evaluate(
             () => (process as typeof process & { testHelperPID?: number }).testHelperPID
@@ -196,7 +200,9 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(2)
         await page.getByRole('button', { name: 'Install Helper', exact: true }).click()
         await expect
-            .poll(async () => (await page.evaluate(() => window.fluxy.snapshot())).helper.state)
+            .poll(async () => (await page.evaluate(() => window.fluxy.snapshot())).helper.state, {
+                timeout: 20000
+            })
             .toBe('ready')
         helperPID = await app.evaluate(() => (process as any).testHelperPID)
         expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(3)
