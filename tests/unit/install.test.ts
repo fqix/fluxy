@@ -158,10 +158,18 @@ describe.skipIf(process.platform === 'win32')(
                 const { directory, env } = await fixture(format, false, arch)
                 const { stdout } = await execute(
                     '/bin/bash',
-                    ['install.sh', '--version', '0.1.0', '--format', format],
+                    [
+                        'install.sh',
+                        '--version',
+                        arch === 'arm64' ? 'v0.1.0' : '0.1.0',
+                        '--format',
+                        format
+                    ],
                     { env }
                 )
-                expect(stdout).toContain(`Fluxy-0.1.0-linux-${packageArch}.${format}`)
+                expect(stdout).toContain(
+                    `/releases/download/v0.1.0/Fluxy-0.1.0-linux-${packageArch}.${format}`
+                )
                 const command = await readFile(join(directory, 'privileged-arguments'), 'utf8')
                 expect(command).toContain('Checksum changed before installation')
                 expect(command).toContain(format === 'deb' ? 'apt-get' : 'dnf')

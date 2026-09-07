@@ -23,13 +23,13 @@ if ($Arch -eq 'auto') {
         default { throw 'Only x64 and arm64 are supported.' }
     }
 }
-$Version = $Version -replace '^electron-v', ''
+$Version = $Version -replace '^v', ''
 if ($Version -eq 'latest') {
     $tag = "electron-stable-$Arch"
     $artifact = "Fluxy-win-$Arch.exe"
 } else {
     if ($Version -notmatch '^\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?$') { throw 'Invalid release version.' }
-    $tag = "electron-v$Version"
+    $tag = "v$Version"
     $artifact = "Fluxy-$Version-win-$Arch.exe"
 }
 $url = "https://github.com/fqix/fluxy/releases/download/$tag/$artifact"

@@ -1,7 +1,7 @@
 name: Electron Release
 on:
   push:
-    tags: ['electron-v*']
+    tags: ['v*']
 permissions:
   contents: write
 concurrency:
@@ -56,7 +56,7 @@ jobs:
       - name: Validate release version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: node -e 'if(process.env.RELEASE_TAG !== "electron-v"+require("./package.json").version) throw Error("Tag and package version must match")'
+        run: node -e 'if(process.env.RELEASE_TAG !== "v"+require("./package.json").version) throw Error("Tag and package version must match")'
       - name: Select macOS signing mode
         id: mac-signing
         if: runner.os == 'macOS'

@@ -45,7 +45,7 @@ The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packa
 
 `tools/publish-electron-release.mjs --prepare` creates per-file SHA-256 sidecars, stable aliases, and a release plan without uploading anything. The aggregate `--publish release-artifacts` step uploads:
 
-- Versioned assets under `electron-vVERSION`, such as `Fluxy-0.1.0-linux-amd64.deb` and its `.sha256` sidecar.
+- Versioned assets under `vVERSION`, such as `Fluxy-0.1.0-linux-amd64.deb` and its `.sha256` sidecar.
 - Stable aliases under `electron-stable-ARCH`, such as `Fluxy-linux-x64.deb` and its `.sha256` sidecar.
 - Versioned-release metadata named `latest-OS-ARCH.yml` (for example, `latest-win-arm64.yml`), so architectures cannot overwrite each other.
 - Versioned updater packages followed by metadata in each architecture's stable feed: `latest-mac.yml` on macOS, `latest.yml` on Windows, and `latest-linux.yml` / `latest-linux-arm64.yml` on Linux.

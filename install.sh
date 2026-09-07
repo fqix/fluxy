@@ -10,7 +10,7 @@ usage() {
 Usage: bash install.sh [--version VERSION] [--arch x64|arm64] [--format deb|rpm] [--dry-run]
 Downloads Fluxy from github.com/fqix/fluxy and verifies its SHA-256 checksum.
 macOS: installs to ~/Applications/Fluxy.app. Linux: uses apt-get, dnf, yum or zypper.
---version accepts latest (default), 0.1.0, or electron-v0.1.0.
+--version accepts latest (default), 0.1.0, or v0.1.0.
 --dry-run prints the selected release URLs without downloading or installing.
 HELP
 }
@@ -52,13 +52,13 @@ else
         *) fail 'Linux package format must be deb or rpm.';;
     esac
 fi
-version=${version#electron-v}
+version=${version#v}
 if [ "$version" = latest ]; then
     tag="electron-stable-$arch"
     artifact="Fluxy-$platform-$arch.$format"
 else
     [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || fail 'Invalid release version.'
-    tag="electron-v$version"
+    tag="v$version"
     package_arch=$arch
     case "$format:$arch" in deb:x64) package_arch=amd64;; rpm:x64) package_arch=x86_64;; rpm:arm64) package_arch=aarch64;; esac
     artifact="Fluxy-$version-$platform-$package_arch.$format"

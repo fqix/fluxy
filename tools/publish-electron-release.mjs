@@ -63,13 +63,13 @@ export function prepareRelease(directory, version, platform, arch) {
 
 // Only the final release job publishes, avoiding concurrent creation of shared feeds.
 export function publishRelease(directories, tag) {
-    if (!/^electron-v\d+\.\d+\.\d+$/.test(tag)) throw new Error('Invalid release tag')
+    if (!/^v\d+\.\d+\.\d+$/.test(tag)) throw new Error('Invalid release tag')
     const entries = directories.map((directory) => ({
         directory,
         plan: JSON.parse(readFileSync(join(directory, 'release-plan.json'), 'utf8'))
     }))
     for (const { directory, plan } of entries) {
-        if (`electron-v${plan.version}` !== tag) throw new Error('Release plan version differs')
+        if (`v${plan.version}` !== tag) throw new Error('Release plan version differs')
         for (const name of [...plan.versioned, ...plan.stable, plan.manifest]) {
             if (basename(name) !== name) throw new Error('Invalid release asset path')
             readFileSync(join(directory, name))
@@ -95,7 +95,7 @@ export function publishRelease(directories, tag) {
             tag,
             '--verify-tag',
             '--title',
-            `Fluxy ${tag.slice(10)}`,
+            `Fluxy ${tag.slice(1)}`,
             '--generate-notes',
             ...files
         ])
@@ -130,7 +130,7 @@ export function publishRelease(directories, tag) {
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
     const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
     const tag = process.env.RELEASE_TAG
-    if (tag !== `electron-v${version}`) throw new Error('Release tag and package version differ')
+    if (tag !== `v${version}`) throw new Error('Release tag and package version differ')
     if (process.argv[2] === '--prepare')
         prepareRelease('dist', version, process.platform, process.arch)
     else if (process.argv[2] === '--publish') {

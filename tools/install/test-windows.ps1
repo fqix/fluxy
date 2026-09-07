@@ -21,7 +21,11 @@ function Start-Process {
 $output = & $installerScript -Arch arm64 -DryRun
 if (($output -join "`n") -notmatch 'electron-stable-arm64/Fluxy-win-arm64.exe') { throw 'Incorrect ARM64 download URL' }
 if ($global:FluxyTestCalls -ne 0) { throw 'Dry-run launched an installer' }
-& $installerScript -Version 0.1.0 -Arch x64
+foreach ($version in @('0.1.0', 'v0.1.0')) {
+    $output = & $installerScript -Version $version -Arch x64 -DryRun
+    if (($output -join "`n") -notmatch '/releases/download/v0.1.0/Fluxy-0.1.0-win-x64.exe') { throw 'Incorrect versioned download URL' }
+}
+& $installerScript -Version v0.1.0 -Arch x64
 if ($global:FluxyTestCalls -ne 1) { throw 'Valid fixture was not installed' }
 # Exercise the documented irm ... | iex execution shape with local script text.
 $env:PROCESSOR_ARCHITECTURE = 'AMD64'
