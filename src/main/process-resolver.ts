@@ -169,7 +169,8 @@ export class ProcessResolver {
                                 '-Command',
                                 `[Console]::OutputEncoding = [Text.UTF8Encoding]::new(); (Get-Process -Id ${owner.pid} -ErrorAction Stop).Path`
                             ],
-                            { timeout: 3000, maxBuffer: 16384, encoding: 'utf8' }
+                            // Windows PowerShell's first launch can exceed three seconds.
+                            { timeout: 10000, maxBuffer: 16384, encoding: 'utf8' }
                         )
                     ).stdout.trim()
                   : (
