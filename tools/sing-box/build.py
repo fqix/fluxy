@@ -14,7 +14,7 @@ import sys
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 SOURCE = ROOT / 'third_party/sing-box'
-PIN = json.loads((HERE / 'pin.json').read_text())
+PIN = json.loads((HERE / 'pin.json').read_text(encoding='utf-8'))
 ARCHES = {'arm64': 'arm64', 'x86_64': 'amd64'}
 TARGET = platform.system().lower().replace('windows', 'windows')
 
@@ -40,7 +40,7 @@ def run(args, **kwargs):
 
 
 def output(args, **kwargs):
-    return run(args, capture_output=True, text=True, **kwargs).stdout.strip()
+    return run(args, capture_output=True, encoding='utf-8', **kwargs).stdout.strip()
 
 
 def go_binary():
@@ -113,18 +113,18 @@ def collect_notices(go, env):
             for entry in folder.iterdir():
                 if entry.is_file() and entry.name.upper().startswith(('LICENSE', 'COPYING', 'NOTICE', 'COPYRIGHT', 'PATENTS')):
                     key = module['Path'] + '/' + str(entry.relative_to(directory))
-                    notices[key] = entry.read_text(errors='replace')
+                    notices[key] = entry.read_text(encoding='utf-8', errors='replace')
             if folder == directory:
                 license_dir = folder / 'LICENSES'
                 if license_dir.is_dir():
                     for entry in license_dir.rglob('*'):
                         if entry.is_file():
-                            notices[module['Path'] + '/' + str(entry.relative_to(directory))] = entry.read_text(errors='replace')
+                            notices[module['Path'] + '/' + str(entry.relative_to(directory))] = entry.read_text(encoding='utf-8', errors='replace')
                 break
     license_path = goroot / 'LICENSE'
     if not license_path.is_file():
         license_path = goroot.parent / 'LICENSE'  # Homebrew keeps it beside libexec.
-    notices['Go/LICENSE'] = license_path.read_text()
+    notices['Go/LICENSE'] = license_path.read_text(encoding='utf-8')
     text = 'Fluxy transport core: sing-box ' + PIN['version'] + '\n'
     text += 'Source: https://github.com/SagerNet/sing-box/tree/' + PIN['revision'] + '\n'
     text += 'Build profile and wrapper source: tools/sing-box in the Fluxy source repository.\n\n'
@@ -162,12 +162,12 @@ def build(destination, arches, work, go):
         else:
             run(['xcrun', 'lipo', '-create', *slices, '-output', core])
         notices, modules = collect_notices(go, go_env(arches[0]))
-        (cached / 'licenses.txt').write_text(notices)
+        (cached / 'licenses.txt').write_text(notices, encoding='utf-8')
         manifest.write_text(json.dumps({**PIN, 'platform': TARGET, 'architectures': arches, 'profile': 'fluxy-transport',
-                                       'modules': modules, 'unsignedSHA256': hashlib.sha256(core.read_bytes()).hexdigest()}, indent=2) + '\n')
+                                       'modules': modules, 'unsignedSHA256': hashlib.sha256(core.read_bytes()).hexdigest()}, indent=2) + '\n', encoding='utf-8')
     else:
         print('Using cached Fluxy core ' + PIN['version'] + ' (' + ', '.join(arches) + ')', flush=True)
-    expected_hash = json.loads(manifest.read_text())['unsignedSHA256']
+    expected_hash = json.loads(manifest.read_text(encoding='utf-8'))['unsignedSHA256']
     if hashlib.sha256(core.read_bytes()).hexdigest() != expected_hash:
         raise RuntimeError('Cached core checksum mismatch; remove its build cache directory and rebuild.')
     destination.parent.mkdir(parents=True, exist_ok=True)

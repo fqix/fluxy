@@ -175,7 +175,7 @@ describe('real proxy traffic', () => {
         expect(result.headers['cache-control']).toBe('no-store')
     })
     it('identifies a real local client process independently of its user-agent', async () => {
-        const child = spawn('/usr/bin/curl', [
+        const child = spawn(process.platform === 'win32' ? 'curl.exe' : 'curl', [
             '--noproxy',
             '',
             '--proxy',
@@ -512,7 +512,7 @@ describe('real proxy traffic', () => {
             expect(t.ssl).toBe(true)
             expect(t.responseBody).toBe('{"tls":"decrypted"}')
             store.rules = [rule('breakpoint')]
-            const child = spawn('/usr/bin/curl', [
+            const child = spawn(process.platform === 'win32' ? 'curl.exe' : 'curl', [
                 '--noproxy',
                 '',
                 '--proxy',
