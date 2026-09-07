@@ -912,7 +912,6 @@ else {
         .whenReady()
         .then(async () => {
             if (quitting) return
-            configureAboutPanel()
             store = new Store(app.getPath('userData'))
             projects = new ProjectStore(store)
             customCertificates = new CustomCertificates(
@@ -946,6 +945,8 @@ else {
             if (quitting) return
             tun = new TunService(store, engine, corePath, () => emit({ type: 'state' }), helper)
             await tun.checkCore()
+            if (quitting) return
+            await configureAboutPanel(corePath)
             if (quitting) return
             engine.scriptRunner = (script, message) => scripts.run(script, message)
             systemProxy = new SystemProxy(store)
