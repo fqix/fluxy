@@ -428,34 +428,6 @@ small {
     flex-direction: column;
     background: var(--bg);
 }
-.workspace-tabs {
-    height: 29px;
-    display: flex;
-    border-bottom: 1px solid var(--line);
-    background: var(--surface);
-    overflow-x: auto;
-    flex-shrink: 0;
-}
-.workspace-tabs > div {
-    display: flex;
-    align-items: center;
-    border-right: 1px solid var(--line);
-    min-width: 120px;
-    color: var(--muted);
-}
-.workspace-tabs > div.active {
-    background: var(--bg);
-    color: var(--text);
-    box-shadow: inset 0 2px var(--accent);
-}
-.workspace-tabs button {
-    font-size: 11px;
-}
-.workspace-tabs > div > button:first-child {
-    flex: 1;
-    justify-content: flex-start;
-    padding-left: 12px;
-}
 .filter-tabs {
     display: flex;
     gap: 2px;

@@ -1,4 +1,10 @@
-import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
+import {
+    test,
+    expect,
+    _electron as electron,
+    type ElectronApplication,
+    type Page
+} from '@playwright/test'
 import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -7,6 +13,13 @@ import { once } from 'node:events'
 import type { AddressInfo } from 'node:net'
 import { initialMenuState } from '../../src/shared/app/menu'
 
+async function workspaceState(page: Page) {
+    return page.evaluate(async () => {
+        const { projects } = await window.fluxy.snapshot()
+        const project = projects.projects.find((p) => p.id === projects.activeID)!
+        return { count: project.tabs.length }
+    })
+}
 async function state(app: ElectronApplication, id: string) {
     return app.evaluate(({ Menu }, id) => {
         const item = Menu.getApplicationMenu()!.getMenuItemById(id)!
@@ -98,17 +111,17 @@ test('native menu controls workspaces, views, traffic, selection and dialogs', a
         expect((await state(app, 'compare')).enabled).toBe(false)
         expect((await state(app, 'close-workspace')).enabled).toBe(false)
         await click(app, 'new-workspace')
-        await expect(page.locator('.workspace-tabs > div')).toHaveCount(2)
+        await expect.poll(async () => (await workspaceState(page)).count).toBe(2)
         await click(app, 'rename-workspace')
         await page.getByLabel('Workspace name').fill('Menu workspace')
         await page.getByRole('button', { name: 'Rename', exact: true }).click()
-        await expect(page.locator('.workspace-tabs > .active')).toContainText('Menu workspace')
+        await expect(page.locator('.workspace-title')).toContainText('Menu workspace')
         await click(app, 'previous-workspace')
-        await expect(page.locator('.workspace-tabs > .active')).toContainText('All Traffic')
+        await expect(page.locator('.workspace-title')).toContainText('All Traffic')
         await click(app, 'next-workspace')
-        await expect(page.locator('.workspace-tabs > .active')).toContainText('Menu workspace')
+        await expect(page.locator('.workspace-title')).toContainText('Menu workspace')
         await click(app, 'close-workspace')
-        await expect(page.locator('.workspace-tabs > div')).toHaveCount(1)
+        await expect.poll(async () => (await workspaceState(page)).count).toBe(1)
         await click(app, 'sidebar')
         await expect(page.locator('.sidebar')).toHaveCount(0)
         await expect.poll(async () => (await state(app, 'sidebar')).checked).toBe(false)
@@ -356,12 +369,12 @@ test('project menus persist tabs and filters across switching and restart', asyn
         await expect(page.getByRole('textbox', { name: 'Search traffic' })).toHaveValue(
             'original filter'
         )
-        await expect(page.locator('.workspace-tabs > div')).toHaveCount(1)
+        await expect.poll(async () => (await workspaceState(page)).count).toBe(1)
         await click(app, `project:${apiID}`)
         await expect(page.getByRole('textbox', { name: 'Search traffic' })).toHaveValue(
             'api filter'
         )
-        await expect(page.locator('.workspace-tabs > div')).toHaveCount(2)
+        await expect.poll(async () => (await workspaceState(page)).count).toBe(2)
         await click(app, 'rename-project')
         await page.getByLabel('Project name').fill('Renamed API')
         await page.getByRole('button', { name: 'Rename Project', exact: true }).click()
@@ -388,7 +401,7 @@ test('project menus persist tabs and filters across switching and restart', asyn
         await expect(page.getByRole('textbox', { name: 'Search traffic' })).toHaveValue(
             'api filter'
         )
-        await expect(page.locator('.workspace-tabs > div')).toHaveCount(2)
+        await expect.poll(async () => (await workspaceState(page)).count).toBe(2)
         await expect.poll(async () => (await state(app, `project:${apiID}`)).checked).toBe(true)
         await click(app, `project:${defaultID}`)
         await expect(page.getByRole('textbox', { name: 'Search traffic' })).toHaveValue(

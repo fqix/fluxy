@@ -4,7 +4,7 @@
 
 | Directory       | Responsibility                                                                            |
 | --------------- | ----------------------------------------------------------------------------------------- |
-| `app/`          | Application startup, shutdown coordination, and native menus                              |
+| `app/`          | Application startup, shutdown coordination, native menus, and About information           |
 | `capture/`      | HTTP/HTTPS capture, upstream forwarding, process identity, timing, and network conditions |
 | `certificates/` | Root certificates and imported client/server certificates                                 |
 | `diff/`         | Transaction comparison and saved diff workspaces                                          |

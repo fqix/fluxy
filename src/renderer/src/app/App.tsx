@@ -1076,7 +1076,9 @@ export function App() {
                     </Button>
                 </div>
                 <strong className="workspace-title">
-                    {workspace.scope.replace(/^(domain|app):/, '')}
+                    {workspace.name === 'All Traffic'
+                        ? workspace.scope.replace(/^(domain|app):/, '')
+                        : workspace.name}
                 </strong>
                 <Button
                     className="proxy-pill"
@@ -1403,27 +1405,6 @@ export function App() {
                     </>
                 )}
                 <main className="workspace">
-                    <div className="workspace-tabs">
-                        {workspaces.map((w) => (
-                            <div className={w.id === active ? 'active' : ''} key={w.id}>
-                                <Button onClick={() => setActive(w.id)}>
-                                    <Activity size={12} />
-                                    {w.name}
-                                </Button>
-                                {workspaces.length > 1 && w.isClosable !== false && (
-                                    <Button
-                                        title="Close workspace"
-                                        onClick={() => closeWorkspace(w.id)}
-                                    >
-                                        <X size={11} />
-                                    </Button>
-                                )}
-                            </div>
-                        ))}
-                        <Button title="New workspace" onClick={addWorkspace}>
-                            <Plus size={13} />
-                        </Button>
-                    </div>
                     <nav className="filter-tabs">
                         {filters.map((f) => (
                             <Button

@@ -50,6 +50,7 @@ import {
 } from '../../shared/app/menu'
 import { buildMenuTemplate, updateMenuItems } from './menu'
 import { stopServices } from './lifecycle'
+import { configureAboutPanel } from './about'
 import { writePrivateFile } from '../storage/private-files'
 import { compareTransactions, diffText } from '../diff/diff'
 import { DiffWorkspace } from '../diff/diff-workspace'
@@ -911,6 +912,7 @@ else {
         .whenReady()
         .then(async () => {
             if (quitting) return
+            configureAboutPanel()
             store = new Store(app.getPath('userData'))
             projects = new ProjectStore(store)
             customCertificates = new CustomCertificates(
