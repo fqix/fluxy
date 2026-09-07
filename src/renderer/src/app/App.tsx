@@ -1,3 +1,8 @@
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import type { Run } from '@/types/actions'
+import { ToolWindow } from '@/components/layout/ToolWindow'
+import { useAdvancedFilter } from '@/hooks/useAdvancedFilter'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
     Activity,
@@ -44,8 +49,8 @@ import {
     type HighlightColor,
     type Snapshot,
     type Transaction
-} from '../../shared/model'
-import { Details, Inspector, type Run } from './Inspector'
+} from '@shared/model'
+import { Details, Inspector } from '@/features/traffic/Inspector'
 import {
     MCPSettings,
     UpstreamSettings,
@@ -55,17 +60,16 @@ import {
     DeveloperSetup,
     Preferences,
     RuleEditor,
-    ruleNames,
-    ToolWindow
-} from './Tools'
-import { TunSettingsPanel, HelperPanel } from './TunSettings'
-import { Welcome } from './Welcome'
+    ruleNames
+} from '@/features/tools/Tools'
+import { TunSettingsPanel, HelperPanel } from '@/features/capture/TunSettings'
+import { Welcome } from '@/features/onboarding/Welcome'
 import {
     pruneBreakpointDrafts,
     BreakpointQueue,
     BreakpointTemplates,
     KeyboardShortcuts
-} from './BreakpointTools'
+} from '@/features/breakpoints/BreakpointTools'
 import {
     ProjectManager,
     RequestNote,
@@ -74,15 +78,15 @@ import {
     PublishGist,
     ProtobufSettings,
     CustomCertificateSettings
-} from './ParityTools'
-import { workspaceSchema, type ProjectAction, type ProjectCatalog } from '../../shared/projects'
-import { toolCommands, type MenuCommand, type MenuState } from '../../shared/menu'
-import { Updates } from './Updates'
-import { NetworkConditions } from './NetworkConditions'
-import { DiffView } from './DiffView'
-import { AdvancedFilters, useAdvancedFilter } from './AdvancedFilters'
-import type { FilterRule } from '../../shared/filters'
-import icon from '../../../resources/icon.png'
+} from '@/features/tools/ParityTools'
+import { workspaceSchema, type ProjectAction, type ProjectCatalog } from '@shared/projects'
+import { toolCommands, type MenuCommand, type MenuState } from '@shared/menu'
+import { Updates } from '@/features/updates/Updates'
+import { NetworkConditions } from '@/features/capture/NetworkConditions'
+import { DiffView } from '@/features/diff/DiffView'
+import { AdvancedFilters } from '@/features/filters/AdvancedFilters'
+import type { FilterRule } from '@shared/filters'
+import icon from '@assets/icon.png'
 
 type Workspace = {
     id: string
@@ -1020,7 +1024,7 @@ export function App() {
     const setScope = (scope: string) => patch({ scope })
     const section = (title: string, children: React.ReactNode, count?: number) => (
         <div className="sidebar-section">
-            <button
+            <Button
                 className="section-heading"
                 onClick={() =>
                     setSectionClosed((v) =>
@@ -1035,12 +1039,12 @@ export function App() {
                 )}
                 <span>{title}</span>
                 <small>{count}</small>
-            </button>
+            </Button>
             {!sectionClosed.includes(title) && children}
         </div>
     )
     const nav = (title: string, key: string, icon: React.ReactNode, count?: number) => (
-        <button
+        <Button
             key={key}
             className={`nav-row ${workspace.scope === key ? 'selected' : ''}`}
             onClick={() => setScope(key)}
@@ -1049,7 +1053,7 @@ export function App() {
             {icon}
             <span>{title}</span>
             <small>{count ?? ''}</small>
-        </button>
+        </Button>
     )
     if (!snapshot)
         return (
@@ -1063,14 +1067,14 @@ export function App() {
         <div className="app" onClick={() => contextMenu && setContextMenu(undefined)}>
             <div className="titlebar">
                 <div className="titlebar-left" style={{ width: sidebar ? sidebarWidth : 104 }}>
-                    <button title="Toggle sidebar" onClick={() => setSidebar((v) => !v)}>
+                    <Button title="Toggle sidebar" onClick={() => setSidebar((v) => !v)}>
                         <PanelLeft size={18} />
-                    </button>
+                    </Button>
                 </div>
                 <strong className="workspace-title">
                     {workspace.scope.replace(/^(domain|app):/, '')}
                 </strong>
-                <button
+                <Button
                     className="proxy-pill"
                     title="Proxy status and connection setup"
                     aria-label="Proxy status and connection setup"
@@ -1085,9 +1089,9 @@ export function App() {
                         | {snapshot.settings.localhostOnly ? '127.0.0.1' : '0.0.0.0'}:
                         {snapshot.settings.port} | {snapshot.running ? 'Running' : 'Stopped'}
                     </span>
-                </button>
+                </Button>
                 <div className="window-actions">
-                    <button
+                    <Button
                         title={snapshot.running ? 'Stop proxy' : 'Start proxy'}
                         disabled={busy > 0}
                         onClick={() =>
@@ -1101,8 +1105,8 @@ export function App() {
                         ) : (
                             <Play size={17} fill="currentColor" />
                         )}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         title={snapshot.recording ? 'Pause recording' : 'Resume recording'}
                         onClick={() => void run(() => window.fluxy.record(!snapshot.recording))}
                     >
@@ -1115,25 +1119,25 @@ export function App() {
                         ) : (
                             <Pause size={17} />
                         )}
-                    </button>
-                    <button title="Compose request" onClick={() => openTool('Compose')}>
+                    </Button>
+                    <Button title="Compose request" onClick={() => openTool('Compose')}>
                         <Code2 size={18} />
-                    </button>
+                    </Button>
                     <i />
-                    <button
+                    <Button
                         title="Toggle bottom inspector"
                         className={inspector && selected ? 'blue' : ''}
                         onClick={() => setInspector((v) => !v)}
                     >
                         <PanelBottom size={18} />
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         title="Toggle context dock"
                         className={dock ? 'blue' : ''}
                         onClick={() => setDock((v) => !v)}
                     >
                         <PanelRight size={18} />
-                    </button>
+                    </Button>
                 </div>
             </div>
             <div className="app-body">
@@ -1142,13 +1146,13 @@ export function App() {
                         <aside className="sidebar" style={{ width: sidebarWidth }}>
                             <div className="sidebar-tabs segmented">
                                 {['Browse', 'Focus', 'Library'].map((tab) => (
-                                    <button
+                                    <Button
                                         key={tab}
                                         className={sidebarTab === tab ? 'active' : ''}
                                         onClick={() => setSidebarTab(tab)}
                                     >
                                         {tab}
-                                    </button>
+                                    </Button>
                                 ))}
                             </div>
                             <div className="sidebar-scroll">
@@ -1258,7 +1262,7 @@ export function App() {
                                         <div className="section-label">Sessions</div>
                                         {snapshot.sessions.map((s) => (
                                             <div className="session-row" key={s.id}>
-                                                <button
+                                                <Button
                                                     title={`${s.count} requests · ${new Date(s.createdAt).toLocaleString()}`}
                                                     onClick={() => {
                                                         setSessionName(s.id)
@@ -1268,8 +1272,8 @@ export function App() {
                                                     <Folder size={15} />
                                                     <span>{s.name}</span>
                                                     <small>{s.count}</small>
-                                                </button>
-                                                <button
+                                                </Button>
+                                                <Button
                                                     title="Delete session"
                                                     onClick={() => {
                                                         setSessionName(s.id)
@@ -1277,10 +1281,10 @@ export function App() {
                                                     }}
                                                 >
                                                     <Trash2 size={12} />
-                                                </button>
+                                                </Button>
                                             </div>
                                         ))}
-                                        <button
+                                        <Button
                                             className="nav-row"
                                             onClick={() => {
                                                 setSessionName('Untitled Session')
@@ -1289,7 +1293,7 @@ export function App() {
                                         >
                                             <Plus size={14} />
                                             Save Current Session
-                                        </button>
+                                        </Button>
                                     </>
                                 )}
                                 {sidebarTab === 'Focus' && (
@@ -1301,11 +1305,11 @@ export function App() {
                                         </p>
                                         {focusSets.map((f, i) => (
                                             <div className="session-row" key={i}>
-                                                <button onClick={() => patch(f)}>
+                                                <Button onClick={() => patch(f)}>
                                                     <Layers size={14} />
                                                     <span>{f.name}</span>
-                                                </button>
-                                                <button
+                                                </Button>
+                                                <Button
                                                     title="Delete focus set"
                                                     onClick={() =>
                                                         setFocusSets(
@@ -1314,10 +1318,10 @@ export function App() {
                                                     }
                                                 >
                                                     <X size={12} />
-                                                </button>
+                                                </Button>
                                             </div>
                                         ))}
-                                        <button
+                                        <Button
                                             className="nav-row"
                                             onClick={() => {
                                                 setFocusName('')
@@ -1326,7 +1330,7 @@ export function App() {
                                         >
                                             <Plus size={14} />
                                             Save Current Focus
-                                        </button>
+                                        </Button>
                                         <div className="section-label">Noise Control</div>
                                         <p className="sidebar-help">
                                             Muted domains remain captured and are hidden in this
@@ -1335,7 +1339,7 @@ export function App() {
                                         {workspace.muted.map((host) => (
                                             <div className="session-row" key={host}>
                                                 <span>{host}</span>
-                                                <button
+                                                <Button
                                                     title="Unmute domain"
                                                     onClick={() =>
                                                         patch({
@@ -1346,11 +1350,11 @@ export function App() {
                                                     }
                                                 >
                                                     <X size={12} />
-                                                </button>
+                                                </Button>
                                             </div>
                                         ))}
                                         {selected && (
-                                            <button
+                                            <Button
                                                 className="nav-row"
                                                 onClick={() =>
                                                     patch({
@@ -1365,25 +1369,25 @@ export function App() {
                                             >
                                                 <Plus size={14} />
                                                 Mute {selected.host}
-                                            </button>
+                                            </Button>
                                         )}
                                     </>
                                 )}
                             </div>
                             <div className="sidebar-footer">
-                                <button title="New workspace" onClick={addWorkspace}>
+                                <Button title="New workspace" onClick={addWorkspace}>
                                     <Plus size={16} />
-                                </button>
+                                </Button>
                                 <Search size={12} />
-                                <input
+                                <Input
                                     aria-label="Filter sidebar"
                                     placeholder="Filter"
                                     value={sidebarSearch}
                                     onChange={(e) => setSidebarSearch(e.target.value)}
                                 />
-                                <button title="Settings" onClick={() => setTool('Settings')}>
+                                <Button title="Settings" onClick={() => setTool('Settings')}>
                                     <Settings size={14} />
-                                </button>
+                                </Button>
                             </div>
                         </aside>
                         <div
@@ -1398,33 +1402,33 @@ export function App() {
                     <div className="workspace-tabs">
                         {workspaces.map((w) => (
                             <div className={w.id === active ? 'active' : ''} key={w.id}>
-                                <button onClick={() => setActive(w.id)}>
+                                <Button onClick={() => setActive(w.id)}>
                                     <Activity size={12} />
                                     {w.name}
-                                </button>
+                                </Button>
                                 {workspaces.length > 1 && w.isClosable !== false && (
-                                    <button
+                                    <Button
                                         title="Close workspace"
                                         onClick={() => closeWorkspace(w.id)}
                                     >
                                         <X size={11} />
-                                    </button>
+                                    </Button>
                                 )}
                             </div>
                         ))}
-                        <button title="New workspace" onClick={addWorkspace}>
+                        <Button title="New workspace" onClick={addWorkspace}>
                             <Plus size={13} />
-                        </button>
+                        </Button>
                     </div>
                     <nav className="filter-tabs">
                         {filters.map((f) => (
-                            <button
+                            <Button
                                 className={workspace.filter === f ? 'active' : ''}
                                 key={f}
                                 onClick={() => patch({ filter: f })}
                             >
                                 {f}
-                            </button>
+                            </Button>
                         ))}
                     </nav>
                     <div className="search-row">
@@ -1444,7 +1448,7 @@ export function App() {
                             ))}
                         </select>
                         <div className="search-input">
-                            <input
+                            <Input
                                 ref={search}
                                 aria-label="Search traffic"
                                 placeholder="Search…"
@@ -1452,25 +1456,25 @@ export function App() {
                                 onChange={(e) => patch({ query: e.target.value })}
                             />
                             {workspace.query && (
-                                <button title="Clear search" onClick={() => patch({ query: '' })}>
+                                <Button title="Clear search" onClick={() => patch({ query: '' })}>
                                     <X size={12} />
-                                </button>
+                                </Button>
                             )}
                         </div>
-                        <button
+                        <Button
                             className={advanced ? 'blue' : ''}
                             onClick={() => setAdvanced((v) => !v)}
                         >
                             <Plus size={12} />
                             Add Filter
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             title="Toggle auto select"
                             className={autoSelect ? 'blue' : ''}
                             onClick={() => setAutoSelect((v) => !v)}
                         >
                             <SlidersHorizontal size={14} />
-                        </button>
+                        </Button>
                     </div>
                     {advanced && (
                         <div className="advanced-filters">
@@ -1521,7 +1525,7 @@ export function App() {
                                     <option key={v}>{v}</option>
                                 ))}
                             </select>
-                            <button
+                            <Button
                                 onClick={() => {
                                     patch({ domainFilter: '', clientFilter: '', advancedRules: [] })
                                     setMethod('All methods')
@@ -1530,7 +1534,7 @@ export function App() {
                                 }}
                             >
                                 Reset Filters
-                            </button>
+                            </Button>
                         </div>
                     )}
                     {advanced && (
@@ -1760,18 +1764,18 @@ export function App() {
                                 </p>
                                 <div className="button-row">
                                     {!snapshot.running && (
-                                        <button
+                                        <Button
                                             className="primary"
                                             disabled={busy > 0}
                                             onClick={() => void run(() => window.fluxy.start())}
                                         >
                                             <Play size={13} fill="currentColor" />
                                             Start Capture
-                                        </button>
+                                        </Button>
                                     )}
-                                    <button onClick={() => setTool('Developer Setup')}>
+                                    <Button onClick={() => setTool('Developer Setup')}>
                                         Open Developer Setup
-                                    </button>
+                                    </Button>
                                 </div>
                                 <span className="muted">
                                     {transactions.length
@@ -1805,13 +1809,13 @@ export function App() {
                         </>
                     )}
                     <footer className="statusbar">
-                        <button onClick={() => void run(() => window.fluxy.clear())}>Clear</button>
-                        <button
+                        <Button onClick={() => void run(() => window.fluxy.clear())}>Clear</Button>
+                        <Button
                             className={autoSelect ? 'selected' : ''}
                             onClick={() => setAutoSelect((v) => !v)}
                         >
                             Auto Select
-                        </button>
+                        </Button>
                         <span className="selection-count">
                             {workspace.selected.length}/{filtered.length} rows selected
                         </span>
@@ -1820,34 +1824,34 @@ export function App() {
                                 ? `${selected.method} ${selected.path}`
                                 : 'No request selected'}
                         </span>
-                        <button className="red" onClick={() => setScope('Errors')}>
+                        <Button className="red" onClick={() => setScope('Errors')}>
                             <TriangleAlert size={11} />
                             {errors} errors
-                        </button>
+                        </Button>
                         <span>{bytes(totalBytes)} total</span>
-                        <button
+                        <Button
                             title="Export HAR"
                             onClick={() => void run(() => window.fluxy.exportHAR())}
                         >
                             <Download size={13} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             title="Import HAR"
                             onClick={() => void run(() => window.fluxy.importHAR())}
                         >
                             <Upload size={13} />
-                        </button>
-                        <button title="Proxy logs" onClick={() => setTool('Logs')}>
+                        </Button>
+                        <Button title="Proxy logs" onClick={() => setTool('Logs')}>
                             <Terminal size={13} />
-                        </button>
+                        </Button>
                     </footer>
                     <div className="rules-bar">
                         {['available', 'downloaded'].includes(snapshot.update.phase) && (
-                            <button className="enabled" onClick={() => setTool('Updates')}>
+                            <Button className="enabled" onClick={() => setTool('Updates')}>
                                 {snapshot.update.phase === 'downloaded'
                                     ? 'Install Update'
                                     : 'Update Available'}
-                            </button>
+                            </Button>
                         )}
                         {[
                             'Block List',
@@ -1858,7 +1862,7 @@ export function App() {
                             'Breakpoint',
                             'Network Conditions'
                         ].map((title) => (
-                            <button
+                            <Button
                                 key={title}
                                 className={
                                     snapshot.rules.some(
@@ -1874,27 +1878,27 @@ export function App() {
                                     (r) => ruleNames[r.kind] === title && r.enabled
                                 ).length > 0 &&
                                     ` · ${snapshot.rules.filter((r) => ruleNames[r.kind] === title && r.enabled).length}`}
-                            </button>
+                            </Button>
                         ))}
-                        <button
+                        <Button
                             onClick={() => setTool('SSL Proxying')}
                             className={snapshot.settings.ssl ? 'enabled' : ''}
                         >
                             SSL Proxying
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             onClick={() => setTool('Scripting')}
                             className={snapshot.scripts.some((s) => s.enabled) ? 'enabled' : ''}
                         >
                             Scripting
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             title="Compare selected requests"
                             disabled={workspace.selected.length !== 2}
                             onClick={() => setTool('Compare Requests')}
                         >
                             Compare
-                        </button>
+                        </Button>
                     </div>
                 </main>
                 {dock && (
@@ -1936,16 +1940,16 @@ export function App() {
                         >
                             <label>
                                 Archive password
-                                <input
+                                <Input
                                     aria-label="P12 password"
                                     type="password"
                                     value={p12Password}
                                     onChange={(e) => setP12Password(e.target.value)}
                                 />
                             </label>
-                            <button className="primary" disabled={!p12Password}>
+                            <Button className="primary" disabled={!p12Password}>
                                 Export P12
-                            </button>
+                            </Button>
                         </form>
                     ) : tool === 'Automatic Setup' ? (
                         <AutomaticSetup snapshot={snapshot} run={run} />
@@ -1994,7 +1998,7 @@ export function App() {
                         >
                             <label>
                                 Project name
-                                <input
+                                <Input
                                     autoFocus
                                     aria-label="Project name"
                                     maxLength={100}
@@ -2002,9 +2006,9 @@ export function App() {
                                     onChange={(e) => setProjectName(e.target.value)}
                                 />
                             </label>
-                            <button className="primary" disabled={!projectName.trim()}>
+                            <Button className="primary" disabled={!projectName.trim()}>
                                 {tool === 'New Project' ? 'Create Project' : 'Rename Project'}
-                            </button>
+                            </Button>
                         </form>
                     ) : tool === 'Add Note' && selected ? (
                         <RequestNote transaction={selected} run={run} close={closeTool} />
@@ -2069,18 +2073,18 @@ export function App() {
                                 GNOME/KDE desktops.
                             </p>
                             <div className="button-row">
-                                <button onClick={() => setTool('Welcome to Fluxy')}>
+                                <Button onClick={() => setTool('Welcome to Fluxy')}>
                                     Setup Guide
-                                </button>
-                                <button onClick={() => setTool('Certificates')}>
+                                </Button>
+                                <Button onClick={() => setTool('Certificates')}>
                                     <Shield size={14} />
                                     Certificates
-                                </button>
-                                <button onClick={() => setTool('Developer Setup')}>
+                                </Button>
+                                <Button onClick={() => setTool('Developer Setup')}>
                                     Developer Setup
-                                </button>
-                                <button onClick={() => setTool('Settings')}>Settings</button>
-                                <button onClick={() => setTool('MCP Server')}>MCP Server</button>
+                                </Button>
+                                <Button onClick={() => setTool('Settings')}>Settings</Button>
+                                <Button onClick={() => setTool('MCP Server')}>MCP Server</Button>
                             </div>
                         </div>
                     ) : tool === 'Rename Workspace' ? (
@@ -2095,7 +2099,7 @@ export function App() {
                         >
                             <label>
                                 Workspace name
-                                <input
+                                <Input
                                     autoFocus
                                     aria-label="Workspace name"
                                     maxLength={100}
@@ -2103,16 +2107,16 @@ export function App() {
                                     onChange={(e) => setWorkspaceName(e.target.value)}
                                 />
                             </label>
-                            <button className="primary" disabled={!workspaceName.trim()}>
+                            <Button className="primary" disabled={!workspaceName.trim()}>
                                 Rename
-                            </button>
+                            </Button>
                         </form>
                     ) : tool === 'Sessions' ? (
                         <div className="settings-form">
                             <p>Choose a saved session to open.</p>
                             {snapshot.sessions.length ? (
                                 snapshot.sessions.map((session) => (
-                                    <button
+                                    <Button
                                         key={session.id}
                                         onClick={() => {
                                             setSessionName(session.id)
@@ -2120,7 +2124,7 @@ export function App() {
                                         }}
                                     >
                                         {session.name} · {session.count} requests
-                                    </button>
+                                    </Button>
                                 ))
                             ) : (
                                 <p className="subtle-empty">
@@ -2149,27 +2153,27 @@ export function App() {
                                 available when the required traffic or selection exists.
                             </p>
                             <div className="button-row">
-                                <button onClick={() => setTool('Welcome to Fluxy')}>
+                                <Button onClick={() => setTool('Welcome to Fluxy')}>
                                     Setup Guide
-                                </button>
-                                <button onClick={() => setTool('Developer Setup')}>
+                                </Button>
+                                <Button onClick={() => setTool('Developer Setup')}>
                                     Developer Setup
-                                </button>
-                                <button onClick={() => setTool('Logs')}>Proxy Logs</button>
+                                </Button>
+                                <Button onClick={() => setTool('Logs')}>Proxy Logs</Button>
                             </div>
                         </div>
                     ) : tool === 'Save Session' ? (
                         <div className="settings-form">
                             <label>
                                 Session name
-                                <input
+                                <Input
                                     aria-label="Session name"
                                     value={sessionName}
                                     onChange={(e) => setSessionName(e.target.value)}
                                 />
                             </label>
                             <p>{transactions.length} captured requests will be saved locally.</p>
-                            <button
+                            <Button
                                 className="primary"
                                 onClick={() =>
                                     void run(async () => {
@@ -2179,7 +2183,7 @@ export function App() {
                                 }
                             >
                                 Save Session
-                            </button>
+                            </Button>
                         </div>
                     ) : tool === 'Open Session' || tool === 'Delete Session' ? (
                         <div className="settings-form">
@@ -2189,8 +2193,8 @@ export function App() {
                                     : 'Delete this saved session from disk?'}
                             </p>
                             <div className="button-row">
-                                <button onClick={closeTool}>Cancel</button>
-                                <button
+                                <Button onClick={closeTool}>Cancel</Button>
+                                <Button
                                     className="primary"
                                     onClick={() =>
                                         void run(async () => {
@@ -2203,14 +2207,14 @@ export function App() {
                                     }
                                 >
                                     {tool}
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     ) : tool === 'Save Focus Set' ? (
                         <div className="settings-form">
                             <label>
                                 Name
-                                <input
+                                <Input
                                     value={focusName}
                                     onChange={(e) => setFocusName(e.target.value)}
                                 />
@@ -2219,7 +2223,7 @@ export function App() {
                                 Scope: {workspace.scope} · Filter: {workspace.filter} · Search:{' '}
                                 {workspace.query || '(none)'}
                             </p>
-                            <button
+                            <Button
                                 className="primary"
                                 disabled={!focusName.trim()}
                                 onClick={() => {
@@ -2236,7 +2240,7 @@ export function App() {
                                 }}
                             >
                                 Save Focus Set
-                            </button>
+                            </Button>
                         </div>
                     ) : tool === 'Logs' ? (
                         <div className="log-list">
@@ -2310,9 +2314,9 @@ export function App() {
                             }
                         ]
                     ].map(([label, action]) => (
-                        <button key={label as string} onClick={action as () => void}>
+                        <Button key={label as string} onClick={action as () => void}>
                             {label as string}
-                        </button>
+                        </Button>
                     ))}
                 </div>
             )}
@@ -2320,9 +2324,9 @@ export function App() {
                 <div className="notification error-notification" role="alert">
                     <TriangleAlert size={18} />
                     <span>{error}</span>
-                    <button aria-label="Dismiss error" onClick={() => setError('')}>
+                    <Button aria-label="Dismiss error" onClick={() => setError('')}>
                         <X size={15} />
-                    </button>
+                    </Button>
                 </div>
             )}
             {toast && (

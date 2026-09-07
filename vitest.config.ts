@@ -1,2 +1,12 @@
 import { defineConfig } from 'vitest/config'
-export default defineConfig({ test: { include: ['tests/unit/**/*.test.ts'], testTimeout: 20000 } })
+import { resolve } from 'node:path'
+export default defineConfig({
+    resolve: {
+        alias: {
+            '@': resolve('src/renderer/src'),
+            '@shared': resolve('src/shared'),
+            '@assets': resolve('resources')
+        }
+    },
+    test: { include: ['tests/unit/**/*.test.ts'], testTimeout: 20000 }
+})

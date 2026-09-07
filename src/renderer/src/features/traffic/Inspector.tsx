@@ -1,33 +1,14 @@
-import { timingLabels } from '../../shared/timing'
+import { HeaderTable } from '@/components/data/HeaderTable'
+import type { Run } from '@/types/actions'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { timingLabels } from '@shared/timing'
 import { useState, useEffect } from 'react'
-import { protocolPanels } from '../../shared/protocols'
+import { protocolPanels } from '@shared/protocols'
 import { Copy, LockKeyhole, Pin, Send, Bookmark, X, ArrowDown, ArrowUp } from 'lucide-react'
-import { bytes, pretty, toCurl, type Transaction } from '../../shared/model'
+import { bytes, pretty, toCurl, type Transaction } from '@shared/model'
 
-export type Run = (action: () => Promise<unknown>, success?: string) => Promise<void>
-export function HeaderTable({ values }: { values: Record<string, string> | [string, string][] }) {
-    const entries = Array.isArray(values) ? values : Object.entries(values)
-    return entries.length ? (
-        <table className="kv">
-            <thead>
-                <tr>
-                    <th>Key</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                {entries.map(([key, value], i) => (
-                    <tr key={`${key}-${i}`}>
-                        <td>{key}</td>
-                        <td>{value}</td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-    ) : (
-        <div className="subtle-empty">No values</div>
-    )
-}
 function Body({
     text,
     tab,
@@ -64,7 +45,7 @@ function Body({
         <>
             <div className="body-tools">
                 <span>{bytes(new TextEncoder().encode(text).length)} · UTF-8</span>
-                <input
+                <Input
                     aria-label="Find in payload"
                     placeholder="Find in payload…"
                     value={search}
@@ -129,13 +110,13 @@ function Pane({
             <div className="pane-title">{side}</div>
             <div className="inspector-tabs">
                 {tabs.map((item) => (
-                    <button
+                    <Button
                         key={item}
                         className={tab === item ? 'active' : ''}
                         onClick={() => setTab(item)}
                     >
                         {item}
-                    </button>
+                    </Button>
                 ))}
             </div>
             <div className="pane-body">
@@ -245,13 +226,13 @@ export function Inspector({
                 </span>
                 {t.ssl && <LockKeyhole size={12} className="green" />}
                 <span className="request-url">{t.url}</span>
-                <button
+                <Button
                     title="Copy as cURL"
                     onClick={() => void run(() => window.fluxy.copy(toCurl(t)), 'Copied as cURL')}
                 >
                     <Copy size={13} />
-                </button>
-                <button
+                </Button>
+                <Button
                     title="Pin request"
                     className={t.pinned ? 'blue' : ''}
                     onClick={() =>
@@ -259,8 +240,8 @@ export function Inspector({
                     }
                 >
                     <Pin size={13} />
-                </button>
-                <button
+                </Button>
+                <Button
                     title="Save request"
                     className={t.saved ? 'blue' : ''}
                     onClick={() =>
@@ -268,13 +249,13 @@ export function Inspector({
                     }
                 >
                     <Bookmark size={13} />
-                </button>
-                <button title="Edit and resend" onClick={compose}>
+                </Button>
+                <Button title="Edit and resend" onClick={compose}>
                     <Send size={13} />
-                </button>
-                <button title="Close inspector" onClick={close}>
+                </Button>
+                <Button title="Close inspector" onClick={close}>
                     <X size={13} />
-                </button>
+                </Button>
             </header>
             {t.error && <div className="error-banner">{t.error}</div>}
             {t.truncated && (
@@ -287,15 +268,15 @@ export function Inspector({
                 <div className="breakpoint-banner">
                     <strong>Paused at breakpoint</strong>
                     <span>{t.rule} · automatically aborted after 2 minutes</span>
-                    <button onClick={() => void run(() => window.fluxy.breakpoint(t.id, 'abort'))}>
+                    <Button onClick={() => void run(() => window.fluxy.breakpoint(t.id, 'abort'))}>
                         Abort
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         className="primary"
                         onClick={() => void run(() => window.fluxy.breakpoint(t.id, 'continue'))}
                     >
                         Continue
-                    </button>
+                    </Button>
                 </div>
             )}
             <div className="inspector-columns">
@@ -344,7 +325,7 @@ export function Details({ t, run }: { t?: Transaction; run: Run }) {
                 </>
             )}
             <h4>Notes</h4>
-            <textarea
+            <Textarea
                 aria-label="Request notes"
                 key={t.id}
                 defaultValue={t.note}

@@ -10,7 +10,10 @@ test('imports real HAR, displays WebSocket frames, filters gRPC errors and decod
     const har = JSON.parse(await readFile(file, 'utf8'))
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-har-e2e-'))
     const app = await electron.launch({
-        args: ['.'],
+        args: process.env.FLUXY_TEST_EXECUTABLE ? [] : ['.'],
+        ...(process.env.FLUXY_TEST_EXECUTABLE
+            ? { executablePath: process.env.FLUXY_TEST_EXECUTABLE }
+            : {}),
         env: { ...process.env, FLUXY_DATA_DIR: directory }
     })
     try {

@@ -1,0 +1,2 @@
+# Preserve the original serialization of captured traffic fixtures.
+tests/fixtures/**/*.har

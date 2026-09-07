@@ -32,6 +32,16 @@ describe('published installer contract', () => {
         [
             'darwin',
             'mac',
+            'x64',
+            [
+                ['dmg', 'x64'],
+                ['zip', 'x64']
+            ],
+            'latest-x64-mac.yml'
+        ],
+        [
+            'darwin',
+            'mac',
             'arm64',
             [
                 ['dmg', 'arm64'],

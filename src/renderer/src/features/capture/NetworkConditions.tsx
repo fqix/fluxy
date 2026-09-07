@@ -1,7 +1,10 @@
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import type { Run } from '@/types/actions'
 import { useState } from 'react'
-import { networkPresets, type NetworkPreset } from '../../shared/network-conditions'
-import { ruleSchema, type Rule, type Snapshot } from '../../shared/model'
-import type { Run } from './Inspector'
+import { networkPresets, type NetworkPreset } from '@shared/network-conditions'
+import { ruleSchema, type Rule, type Snapshot } from '@shared/model'
+
 export function NetworkConditions({
     snapshot,
     run,
@@ -44,14 +47,14 @@ export function NetworkConditions({
     return (
         <div className="rule-layout network-conditions">
             <aside className="rule-list">
-                <input
+                <Input
                     aria-label="Search network conditions"
                     placeholder="Search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                 />
-                <button onClick={() => setDraft(fresh())}>Add Rule</button>
-                <button
+                <Button onClick={() => setDraft(fresh())}>Add Rule</Button>
+                <Button
                     disabled={!conditions.some((r) => r.enabled)}
                     onClick={() =>
                         void run(() =>
@@ -64,13 +67,13 @@ export function NetworkConditions({
                     }
                 >
                     Disable All
-                </button>
+                </Button>
                 {conditions
                     .filter((r) =>
                         (r.name + ' ' + r.pattern).toLowerCase().includes(query.toLowerCase())
                     )
                     .map((r) => (
-                        <button
+                        <Button
                             className={r.id === draft.id ? 'selected' : ''}
                             key={r.id}
                             onClick={() => setDraft(r)}
@@ -80,7 +83,7 @@ export function NetworkConditions({
                                 {r.enabled ? 'Active' : 'Inactive'} ·{' '}
                                 {networkPresets[r.networkPreset ?? 'custom'].name} · {r.delay} ms
                             </small>
-                        </button>
+                        </Button>
                     ))}
             </aside>
             <div className="settings-form">
@@ -90,7 +93,7 @@ export function NetworkConditions({
                 </p>
                 <label>
                     Name
-                    <input
+                    <Input
                         aria-label="Network condition name"
                         value={draft.name}
                         onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -107,7 +110,7 @@ export function NetworkConditions({
                 </label>
                 <label>
                     URL pattern
-                    <input
+                    <Input
                         aria-label="Network condition pattern"
                         value={draft.pattern}
                         onChange={(e) => setDraft({ ...draft, pattern: e.target.value })}
@@ -168,7 +171,7 @@ export function NetworkConditions({
                             : key === 'uploadKbps'
                               ? 'Upload (kbit/s; 0 is unlimited)'
                               : 'Download (kbit/s; 0 is unlimited)'}
-                        <input
+                        <Input
                             aria-label={`Network ${key}`}
                             type="number"
                             min={0}
@@ -184,7 +187,7 @@ export function NetworkConditions({
                     passthrough tunnels are unaffected.
                 </p>
                 <div className="button-row">
-                    <button
+                    <Button
                         className="primary"
                         onClick={() =>
                             void run(async () => {
@@ -193,8 +196,8 @@ export function NetworkConditions({
                         }
                     >
                         Save Network Condition
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         disabled={!conditions.some((r) => r.id === draft.id)}
                         onClick={() =>
                             void run(async () => {
@@ -206,7 +209,7 @@ export function NetworkConditions({
                         }
                     >
                         Delete Rule
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

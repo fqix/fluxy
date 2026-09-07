@@ -1,6 +1,8 @@
+import { Button } from '@/components/ui/button'
+import type { Run } from '@/types/actions'
 import { useEffect, useState } from 'react'
-import type { Snapshot } from '../../shared/model'
-import type { Run } from './Inspector'
+import type { Snapshot } from '@shared/model'
+
 export function Updates({ snapshot, run }: { snapshot: Snapshot; run: Run }) {
     const [preferences, setPreferences] = useState(snapshot.settings.updates)
     const [saving, setSaving] = useState(false)
@@ -65,32 +67,32 @@ export function Updates({ snapshot, run }: { snapshot: Snapshot; run: Run }) {
             {state.error && <p role="alert">{state.error}</p>}
             {state.notes && <pre className="release-notes">{state.notes}</pre>}
             <div className="button-row">
-                <button
+                <Button
                     disabled={busy || state.phase === 'unsupported' || state.phase === 'downloaded'}
                     onClick={() => void run(() => window.fluxy.update('check'))}
                 >
                     Check for Updates
-                </button>
+                </Button>
                 {(state.phase === 'available' || (state.phase === 'error' && state.version)) && (
-                    <button
+                    <Button
                         className="primary"
                         onClick={() => void run(() => window.fluxy.update('download'))}
                     >
                         Download Update
-                    </button>
+                    </Button>
                 )}
                 {state.phase === 'downloading' && (
-                    <button onClick={() => void run(() => window.fluxy.update('cancel'))}>
+                    <Button onClick={() => void run(() => window.fluxy.update('cancel'))}>
                         Cancel Download
-                    </button>
+                    </Button>
                 )}
                 {state.phase === 'downloaded' && (
-                    <button
+                    <Button
                         className="primary"
                         onClick={() => void run(() => window.fluxy.update('install'))}
                     >
                         Restart and Install
-                    </button>
+                    </Button>
                 )}
             </div>
             <label className="check">

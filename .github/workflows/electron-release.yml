@@ -13,6 +13,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: macos-15-intel
+            platform: darwin
+            arch: x64
           - os: macos-latest
             platform: darwin
             arch: arm64
@@ -108,6 +111,11 @@ jobs:
           CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: npx electron-builder --win nsis --${{ matrix.arch }} --publish never
+      - name: Test packaged macOS application
+        if: runner.os == 'macOS'
+        run: |
+          if [ "${{ matrix.arch }}" = x64 ]; then app_dir=mac; else app_dir=mac-arm64; fi
+          FLUXY_TEST_EXECUTABLE="$PWD/dist/$app_dir/Fluxy.app/Contents/MacOS/Fluxy" npx playwright test tests/e2e/desktop.spec.ts tests/e2e/har-protocols.spec.ts tests/e2e/ui-theme.spec.ts tests/e2e/update-download.spec.ts
       - name: Prepare installers and checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}

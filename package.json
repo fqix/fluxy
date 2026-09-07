@@ -28,28 +28,35 @@
     "builder-util-runtime": "^9.7.0",
     "electron-updater": "^6.8.9",
     "http-mitm-proxy": "1.1.0",
-    "lucide-react": "^0.577.0",
     "node-forge": "^1.3.1",
     "protobufjs": "^8.8.0",
     "proxy-agent": "^8.0.2",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
     "reflect-metadata": "^0.2.2",
     "zod": "^4.3.0"
   },
   "devDependencies": {
     "@electron/osx-sign": "^2.7.0",
     "@playwright/test": "^1.58.0",
+    "@radix-ui/react-slot": "^1.3.3",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/node": "^22.19.0",
     "@types/node-forge": "^1.3.11",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-react": "^5.1.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "electron": "44.2.0",
     "electron-builder": "^26.8.0",
     "electron-vite": "5.0.0",
+    "lucide-react": "^0.577.0",
     "prettier": "^3.9.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.6.0",
+    "tailwindcss": "^4.3.3",
+    "tw-animate-css": "^1.4.0",
     "typescript": "^5.9.0",
     "vite": "^7.3.0",
     "vitest": "^4.0.0"
@@ -65,7 +72,85 @@
       "resources/**/*",
       "LICENSE",
       "COPYRIGHT.md",
-      "THIRD_PARTY_NOTICES.md"
+      "THIRD_PARTY_NOTICES.md",
+      "!**/*.map",
+      {
+        "from": "node_modules/react",
+        "to": "licenses/react",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/react-dom",
+        "to": "licenses/react-dom",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/lucide-react",
+        "to": "licenses/lucide-react",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/scheduler",
+        "to": "licenses/scheduler",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/class-variance-authority",
+        "to": "licenses/class-variance-authority",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/clsx",
+        "to": "licenses/clsx",
+        "filter": [
+          "license"
+        ]
+      },
+      {
+        "from": "node_modules/tailwind-merge",
+        "to": "licenses/tailwind-merge",
+        "filter": [
+          "LICENSE.md"
+        ]
+      },
+      {
+        "from": "node_modules/@radix-ui/react-slot",
+        "to": "licenses/@radix-ui/react-slot",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/@radix-ui/react-compose-refs",
+        "to": "licenses/@radix-ui/react-compose-refs",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/tailwindcss",
+        "to": "licenses/tailwindcss",
+        "filter": [
+          "LICENSE"
+        ]
+      },
+      {
+        "from": "node_modules/tw-animate-css",
+        "to": "licenses/tw-animate-css",
+        "filter": [
+          "LICENSE"
+        ]
+      }
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
@@ -94,6 +179,12 @@
             "fluxy-helper.licenses.txt"
           ]
         }
+      ],
+      "electronLanguages": [
+        "en",
+        "en_GB",
+        "zh_CN",
+        "zh_TW"
       ]
     },
     "win": {
@@ -164,6 +255,15 @@
       "oneClick": true,
       "perMachine": false,
       "runAfterFinish": false
+    },
+    "electronLanguages": [
+      "en-US",
+      "en-GB",
+      "zh-CN",
+      "zh-TW"
+    ],
+    "dmg": {
+      "format": "UDBZ"
     }
   },
   "overrides": {

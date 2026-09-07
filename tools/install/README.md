@@ -41,12 +41,12 @@ Both scripts detect x64 or arm64 and allow an explicit override. The requested p
 
 ## Publishing contract
 
-The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packages. The release matrix covers macOS arm64, Linux x64/arm64, and Windows x64/arm64. Each runner builds its native architecture, with explicit architecture selection for Node.js, the core, the Helper and Electron packaging. Linux ARM64 uses `ubuntu-24.04-arm`; Windows ARM64 uses `windows-11-arm`. The final publish job runs only when all platform builds succeed. macOS uses Developer ID signing and notarization when all five Apple signing secrets are configured, or ad-hoc signing without notarization when none are configured. Partial configuration fails the build; Windows accepts optional `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` signing secrets.
+The release workflow builds macOS DMG/ZIP, Linux deb/rpm, and Windows NSIS packages. The release matrix covers macOS x64/arm64, Linux x64/arm64, and Windows x64/arm64. Each runner builds its native architecture, with explicit architecture selection for Node.js, the core, the Helper and Electron packaging. macOS Intel uses `macos-15-intel`; macOS Apple Silicon uses `macos-latest`. Linux ARM64 uses `ubuntu-24.04-arm`; Windows ARM64 uses `windows-11-arm`. The final publish job runs only when all platform builds succeed. macOS uses Developer ID signing and notarization when all five Apple signing secrets are configured, or ad-hoc signing without notarization when none are configured. Partial configuration fails the build; Windows accepts optional `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD` signing secrets.
 
 `tools/publish-electron-release.mjs --prepare` creates per-file SHA-256 sidecars and a release plan, and collects updater metadata without uploading anything. The aggregate `--publish release-artifacts` step uploads:
 
 - Versioned assets under `vVERSION`, such as `Fluxy-0.1.0-linux-amd64.deb` and its `.sha256` sidecar.
-- Architecture-specific updater metadata in the same release: `latest-x64.yml` / `latest-arm64.yml` on Windows, `latest-arm64-mac.yml` on macOS, and `latest-x64-linux.yml` / `latest-arm64-linux-arm64.yml` on Linux.
+- Architecture-specific updater metadata in the same release: `latest-x64.yml` / `latest-arm64.yml` on Windows, `latest-x64-mac.yml` / `latest-arm64-mac.yml` on macOS, and `latest-x64-linux.yml` / `latest-arm64-linux-arm64.yml` on Linux.
 - The two installation scripts, `install.sh` and `install.ps1`.
 
 Only `vVERSION` releases are created. Packaged clients use the generic update URL `https://github.com/fqix/fluxy/releases/latest/download/` with the `latest-ARCH` channel; electron-builder expands the architecture and both builder and updater append the platform suffix. Installation scripts resolve GitHub's latest release redirect, then download the versioned package and checksum from that exact release. Dry runs perform this metadata lookup but do not download packages or install anything; an explicit version skips the lookup.
@@ -54,6 +54,10 @@ Only `vVERSION` releases are created. Packaged clients use the generic update UR
 Clients built before this change still point to the removed architecture feed releases. Those clients need one manual installation of a newer build that uses the new update URL.
 
 The one-line commands become usable after these scripts are pushed to the repository and matching artifacts are publicly accessible. Missing assets, inaccessible/private releases and checksum mismatches cause an explicit failure rather than an attempted installation. A release upload in progress can briefly cause a checksum mismatch; rerun after publishing completes.
+
+## Package size
+
+React, React DOM and Lucide are build-time dependencies: Vite includes the required renderer code in the UI bundle, so their full npm packages are excluded from the installed application. Source maps are omitted from release packages. Electron language resources retain English (US/UK) and Chinese (Simplified/Traditional); the application interface is unchanged. The proxy core, native helper, certificates, protocol decoders and update components remain included. Renderer dependency license texts are copied into `licenses/` inside the app archive. macOS DMGs use UDBZ compression for smaller downloads.
 
 ## Verification
 

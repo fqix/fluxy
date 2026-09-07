@@ -1,13 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import type { FluxyAPI } from '../../shared/model'
-import { App } from './App'
-import './styles.css'
-declare global {
-    interface Window {
-        fluxy: FluxyAPI
-    }
-}
+import { App } from '@/app/App'
+import '@/styles/globals.css'
 createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <App />

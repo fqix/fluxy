@@ -1,6 +1,9 @@
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { useEffect, useRef, useState } from 'react'
-import type { Transaction } from '../../shared/model'
-import type { DiffResult, DiffTarget, DiffPair } from '../../shared/diff'
+import type { Transaction } from '@shared/model'
+import type { DiffResult, DiffTarget, DiffPair } from '@shared/diff'
 export function DiffView({
     transactions,
     initialIDs = [],
@@ -139,7 +142,7 @@ export function DiffView({
                 <h4>Compare History</h4>
                 {pairs.map((pair) => (
                     <div key={pair.id} className={saved === pair.id ? 'active' : ''}>
-                        <button
+                        <Button
                             onClick={() => {
                                 setLeft(pair.left.id)
                                 setRight(pair.right.id)
@@ -149,9 +152,9 @@ export function DiffView({
                         >
                             {pair.pinned ? '★ ' : ''}
                             {pair.name}
-                        </button>
+                        </Button>
                         <div className="button-row">
-                            <button
+                            <Button
                                 aria-label={`Pin comparison ${pair.name}`}
                                 onClick={() =>
                                     void run(async () =>
@@ -164,8 +167,8 @@ export function DiffView({
                                 }
                             >
                                 {pair.pinned ? 'Unpin' : 'Pin'}
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 aria-label={`Delete comparison ${pair.name}`}
                                 onClick={() =>
                                     void run(async () => {
@@ -179,7 +182,7 @@ export function DiffView({
                                 }
                             >
                                 Delete
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 ))}
@@ -200,7 +203,7 @@ export function DiffView({
                             <option>Text</option>
                         </select>
                     </label>
-                    <button
+                    <Button
                         onClick={() => {
                             setSaved(undefined)
                             setLeft(right)
@@ -210,16 +213,16 @@ export function DiffView({
                         }}
                     >
                         Swap
-                    </button>
-                    <button disabled={!result} onClick={() => void exportDiff()}>
+                    </Button>
+                    <Button disabled={!result} onClick={() => void exportDiff()}>
                         Export Diff
-                    </button>
+                    </Button>
                 </div>
                 {source === 'Text' ? (
                     <div className="diff-text-inputs">
                         <label>
                             Side A
-                            <textarea
+                            <Textarea
                                 aria-label="Diff Side A"
                                 rows={8}
                                 maxLength={2 * 1024 * 1024}
@@ -229,7 +232,7 @@ export function DiffView({
                         </label>
                         <label>
                             Side B
-                            <textarea
+                            <Textarea
                                 aria-label="Diff Side B"
                                 rows={8}
                                 maxLength={2 * 1024 * 1024}
@@ -271,7 +274,7 @@ export function DiffView({
                         )}
                         <details className="diff-candidates">
                             <summary>Candidate pool · {candidates.length}</summary>
-                            <input
+                            <Input
                                 aria-label="Search comparison candidates"
                                 placeholder="Filter URL or method"
                                 value={query}
@@ -299,20 +302,20 @@ export function DiffView({
                                             .map((t) => (
                                                 <tr key={t.id}>
                                                     <td>
-                                                        <button
+                                                        <Button
                                                             aria-label={`Assign left ${t.url}`}
                                                             onClick={() => assign('left', t.id)}
                                                         >
                                                             {left === t.id ? '●' : 'L'}
-                                                        </button>
+                                                        </Button>
                                                     </td>
                                                     <td>
-                                                        <button
+                                                        <Button
                                                             aria-label={`Assign right ${t.url}`}
                                                             onClick={() => assign('right', t.id)}
                                                         >
                                                             {right === t.id ? '●' : 'R'}
-                                                        </button>
+                                                        </Button>
                                                     </td>
                                                     <td>{t.method}</td>
                                                     <td>{t.url}</td>
@@ -405,16 +408,16 @@ export function DiffView({
                             <p role="status">
                                 {result.added} added · {result.removed} removed
                             </p>
-                            <button disabled={!changed.length} onClick={() => navigate(-1)}>
+                            <Button disabled={!changed.length} onClick={() => navigate(-1)}>
                                 Previous Difference
-                            </button>
-                            <button disabled={!changed.length} onClick={() => navigate(1)}>
+                            </Button>
+                            <Button disabled={!changed.length} onClick={() => navigate(1)}>
                                 Next Difference
-                            </button>
+                            </Button>
                         </div>
                         <nav className="diff-section-nav">
                             {result.sections.map((s, i) => (
-                                <button
+                                <Button
                                     key={s.title}
                                     onClick={() =>
                                         sections.current[i]?.scrollIntoView({ block: 'start' })
@@ -422,7 +425,7 @@ export function DiffView({
                                 >
                                     {s.title} ·{' '}
                                     {s.lines.filter((l) => l.type !== 'unchanged').length}
-                                </button>
+                                </Button>
                             ))}
                         </nav>
                         {result.sections.map((section, index) => (

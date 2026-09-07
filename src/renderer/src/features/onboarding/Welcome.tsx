@@ -1,7 +1,8 @@
+import { Button } from '@/components/ui/button'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, LockKeyhole, Network, ShieldCheck, Wrench } from 'lucide-react'
-import type { CertificateStatus, Snapshot } from '../../shared/model'
-import icon from '../../../resources/icon.png'
+import type { CertificateStatus, Snapshot } from '@shared/model'
+import icon from '@assets/icon.png'
 
 export function Welcome({
     snapshot,
@@ -202,12 +203,12 @@ export function Welcome({
                                     )}
                                 </div>
                                 {(!row.done || (index === 0 && certificate?.error)) && (
-                                    <button
+                                    <Button
                                         disabled={!!busy || row.disabled}
                                         onClick={() => void row.action()}
                                     >
                                         {row.label}
-                                    </button>
+                                    </Button>
                                 )}
                             </li>
                         ))}
@@ -252,26 +253,26 @@ export function Welcome({
                         Show on startup
                     </label>
                     <div className="welcome-buttons">
-                        <button disabled={!!busy} onClick={dismiss}>
+                        <Button disabled={!!busy} onClick={dismiss}>
                             Close
-                        </button>
+                        </Button>
                         {!manual && completed < 4 && (
-                            <button disabled={!!busy} onClick={() => setManual(true)}>
+                            <Button disabled={!!busy} onClick={() => setManual(true)}>
                                 Use Manual Setup
-                            </button>
+                            </Button>
                         )}
                         {manual && (
-                            <button disabled={!!busy} onClick={() => finish(true)}>
+                            <Button disabled={!!busy} onClick={() => finish(true)}>
                                 Debug My App…
-                            </button>
+                            </Button>
                         )}
-                        <button
+                        <Button
                             className="primary"
                             disabled={!!busy || (!manual && completed < 4)}
                             onClick={() => finish(false)}
                         >
                             {manual ? 'Continue Manually' : 'Get Started'}
-                        </button>
+                        </Button>
                     </div>
                 </footer>
             </div>

@@ -1,12 +1,7 @@
-import { useEffect, useState, useRef } from 'react'
-import {
-    activeFilterRules,
-    filterFields,
-    filterOperators,
-    filterError,
-    type FilterRule
-} from '../../shared/filters'
-import type { Transaction } from '../../shared/model'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { filterFields, filterOperators, filterError, type FilterRule } from '@shared/filters'
+
 export function AdvancedFilters({
     rules,
     change
@@ -63,13 +58,13 @@ export function AdvancedFilters({
                             </option>
                         ))}
                     </select>
-                    <input
+                    <Input
                         aria-label={`Filter ${i + 1} value`}
                         value={r.value}
                         maxLength={10000}
                         onChange={(e) => update(r.id, { value: e.target.value })}
                     />
-                    <button
+                    <Button
                         aria-label={`Move filter ${i + 1} up`}
                         disabled={i === 0}
                         onClick={() => {
@@ -79,17 +74,17 @@ export function AdvancedFilters({
                         }}
                     >
                         ↑
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         aria-label={`Remove filter ${i + 1}`}
                         onClick={() => change(rules.filter((v) => v.id !== r.id))}
                     >
                         ×
-                    </button>
+                    </Button>
                     {filterError(r) && <span role="alert">{filterError(r)}</span>}
                 </div>
             ))}
-            <button
+            <Button
                 disabled={rules.length >= 100}
                 onClick={() =>
                     change([
@@ -106,76 +101,10 @@ export function AdvancedFilters({
                 }
             >
                 Add Condition
-            </button>
+            </Button>
             <span className="muted">
                 Conditions combine from top to bottom. Empty and disabled rows are ignored.
             </span>
         </div>
     )
-}
-export function useAdvancedFilter(
-    transactions: Transaction[],
-    rules: FilterRule[],
-    visible: boolean
-) {
-    const [result, setResult] = useState<{ ids?: Set<string>; error?: string }>({})
-    const key = JSON.stringify(activeFilterRules(rules, visible))
-    const latest = useRef(transactions)
-    latest.current = transactions
-    const request = useRef<() => void>(() => {})
-    useEffect(() => {
-        const active = JSON.parse(key) as FilterRule[]
-        if (!active.length) {
-            setResult({})
-            request.current = () => {}
-            return
-        }
-        setResult({ ids: new Set() })
-        const worker = new Worker(new URL('./filter.worker.ts', import.meta.url), {
-            type: 'module'
-        })
-        let busy = false,
-            failed = false,
-            sent: Transaction[] | undefined,
-            timeout: ReturnType<typeof setTimeout>
-        const fail = (error: string) => {
-            failed = true
-            clearTimeout(timeout)
-            worker.terminate()
-            setResult({ ids: new Set(), error })
-        }
-        const send = () => {
-            if (busy || failed || sent === latest.current) return
-            busy = true
-            sent = latest.current
-            timeout = setTimeout(
-                () =>
-                    fail(
-                        'Filtering exceeded its time limit. Simplify the regular expression or reduce the captured data.'
-                    ),
-                3000
-            )
-            worker.postMessage({ transactions: sent, rules: active })
-        }
-        worker.onmessage = ({ data }: MessageEvent<string[]>) => {
-            clearTimeout(timeout)
-            busy = false
-            setResult({ ids: new Set(data) })
-            // Finish in-flight work and coalesce new traffic, so sustained capture cannot starve filtering.
-            send()
-        }
-        worker.onerror = () => fail('Filter evaluation failed')
-        request.current = send
-        send()
-        return () => {
-            clearTimeout(timeout)
-            worker.terminate()
-            request.current = () => {}
-        }
-    }, [key])
-    useEffect(() => request.current(), [transactions, key])
-    return {
-        ids: key === '[]' ? undefined : (result.ids ?? new Set<string>()),
-        error: key === '[]' ? undefined : result.error
-    }
 }

@@ -1,7 +1,10 @@
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import type { Run } from '@/types/actions'
 import { useState } from 'react'
 import { Network, Play, Square } from 'lucide-react'
-import type { Snapshot } from '../../shared/model'
-import type { Run } from './Inspector'
+import type { Snapshot } from '@shared/model'
 
 export function TunSettingsPanel({
     snapshot,
@@ -108,7 +111,7 @@ export function TunSettingsPanel({
                     </label>
                     <label>
                         Local SOCKS5 exit port
-                        <input
+                        <Input
                             aria-label="TUN SOCKS5 exit port"
                             type="number"
                             min={0}
@@ -127,7 +130,7 @@ export function TunSettingsPanel({
                     </p>
                     <label>
                         Route CIDRs (optional)
-                        <textarea
+                        <Textarea
                             aria-label="TUN route CIDRs"
                             rows={3}
                             placeholder={'Leave empty for all destinations\n203.0.113.10/32'}
@@ -153,22 +156,22 @@ export function TunSettingsPanel({
                         </p>
                     )}
                     <div className="button-row">
-                        <button
+                        <Button
                             disabled={locked}
                             onClick={() => void run(() => save(), 'TUN settings saved')}
                         >
                             Save TUN Settings
-                        </button>
+                        </Button>
                         {active || snapshot.running ? (
-                            <button
+                            <Button
                                 disabled={saving || snapshot.tun.state === 'stopping'}
                                 onClick={() => void run(() => window.fluxy.stop())}
                             >
                                 <Square size={13} />
                                 Stop TUN
-                            </button>
+                            </Button>
                         ) : (
-                            <button
+                            <Button
                                 className="primary"
                                 disabled={saving || !snapshot.tun.available}
                                 onClick={() =>
@@ -180,7 +183,7 @@ export function TunSettingsPanel({
                             >
                                 <Play size={13} />
                                 Start TUN
-                            </button>
+                            </Button>
                         )}
                     </div>
                 </>
@@ -233,7 +236,7 @@ export function HelperPanel({
             )}
             <div className="button-row">
                 {helper.state !== 'ready' && (
-                    <button
+                    <Button
                         disabled={busy || active || changing || helper.state === 'unsupported'}
                         onClick={() => act(() => window.fluxy.installHelper())}
                     >
@@ -242,15 +245,15 @@ export function HelperPanel({
                             : helper.state === 'error'
                               ? 'Repair Helper'
                               : 'Install Helper'}
-                    </button>
+                    </Button>
                 )}
-                <button
+                <Button
                     disabled={busy || changing}
                     onClick={() => act(() => window.fluxy.helperStatus())}
                 >
                     Refresh Helper Status
-                </button>
-                <button
+                </Button>
+                <Button
                     disabled={
                         busy ||
                         changing ||
@@ -260,7 +263,7 @@ export function HelperPanel({
                     onClick={() => act(() => window.fluxy.uninstallHelper())}
                 >
                     Uninstall Helper
-                </button>
+                </Button>
             </div>
             {!compact && (
                 <p className="muted">

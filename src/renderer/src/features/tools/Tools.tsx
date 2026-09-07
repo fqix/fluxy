@@ -1,7 +1,11 @@
-import { setupInstructions } from '../../shared/setup'
-import { useEffect, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { HeaderTable } from '@/components/data/HeaderTable'
+import type { Run } from '@/types/actions'
+import { setupInstructions } from '@shared/setup'
+import { useState } from 'react'
 import {
-    X,
     Plus,
     Trash2,
     FolderOpen,
@@ -19,8 +23,8 @@ import {
     type Transaction,
     type ComposeRequest,
     pretty
-} from '../../shared/model'
-import { HeaderTable, type Run } from './Inspector'
+} from '@shared/model'
+
 export const ruleNames: Record<Rule['kind'], string> = {
     block: 'Block List',
     allow: 'Allow List',
@@ -32,73 +36,7 @@ export const ruleNames: Record<Rule['kind'], string> = {
     networkCondition: 'Network Conditions',
     breakpoint: 'Breakpoint'
 }
-export function ToolWindow({
-    title,
-    close,
-    children
-}: {
-    title: string
-    close: () => void
-    children: React.ReactNode
-}) {
-    const ref = useRef<HTMLDivElement>(null)
-    useEffect(() => {
-        const previous = document.activeElement as HTMLElement
-        ref.current?.focus()
-        const handler = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                e.stopPropagation()
-                close()
-            }
-            if (e.key === 'Tab') {
-                const items = ref.current?.querySelectorAll<HTMLElement>(
-                    'button, input, select, textarea, [tabindex="0"]'
-                )
-                if (!items?.length) return
-                const first = items[0],
-                    last = items[items.length - 1]
-                if (
-                    e.shiftKey &&
-                    (document.activeElement === first || document.activeElement === ref.current)
-                ) {
-                    e.preventDefault()
-                    last.focus()
-                } else if (!e.shiftKey && document.activeElement === last) {
-                    e.preventDefault()
-                    first.focus()
-                }
-            }
-        }
-        document.addEventListener('keydown', handler)
-        return () => {
-            document.removeEventListener('keydown', handler)
-            previous?.focus()
-        }
-    }, [close])
-    return (
-        <div className="modal-scrim">
-            <div
-                ref={ref}
-                className="tool-window"
-                role="dialog"
-                aria-modal="true"
-                aria-label={title}
-                tabIndex={-1}
-            >
-                <header>
-                    <span className="tool-title">
-                        <Settings2 size={15} />
-                        {title}
-                    </span>
-                    <button aria-label="Close dialog" onClick={close}>
-                        <X size={16} />
-                    </button>
-                </header>
-                {children}
-            </div>
-        </div>
-    )
-}
+
 export function RuleEditor({
     initialID,
     title,
@@ -135,7 +73,7 @@ export function RuleEditor({
                 <aside className="rule-list">
                     <div className="section-label">{visible.length} RULES</div>
                     {visible.map((rule) => (
-                        <button
+                        <Button
                             key={rule.id}
                             className={selected === rule.id ? 'selected' : ''}
                             onClick={() => setSelected(rule.id)}
@@ -145,11 +83,11 @@ export function RuleEditor({
                                 {rule.name}
                                 <small>{rule.pattern}</small>
                             </span>
-                        </button>
+                        </Button>
                     ))}
-                    <button onClick={add}>
+                    <Button onClick={add}>
                         <Plus size={14} /> Add Rule
-                    </button>
+                    </Button>
                 </aside>
                 <div className="rule-form">
                     {current ? (
@@ -164,14 +102,14 @@ export function RuleEditor({
                             </label>
                             <label>
                                 Name
-                                <input
+                                <Input
                                     value={current.name}
                                     onChange={(e) => update({ name: e.target.value })}
                                 />
                             </label>
                             <label>
                                 URL pattern
-                                <input
+                                <Input
                                     aria-label="URL pattern"
                                     value={current.pattern}
                                     onChange={(e) => update({ pattern: e.target.value })}
@@ -182,7 +120,7 @@ export function RuleEditor({
                                 <>
                                     <label>
                                         Upload (kbit/s; 0 is unlimited)
-                                        <input
+                                        <Input
                                             aria-label="Upload bandwidth"
                                             type="number"
                                             min={0}
@@ -195,7 +133,7 @@ export function RuleEditor({
                                     </label>
                                     <label>
                                         Download (kbit/s; 0 is unlimited)
-                                        <input
+                                        <Input
                                             aria-label="Download bandwidth"
                                             type="number"
                                             min={0}
@@ -242,7 +180,7 @@ export function RuleEditor({
                                     )}
                                     <label>
                                         Match header name
-                                        <input
+                                        <Input
                                             aria-label="Breakpoint match header"
                                             value={current.matchHeaderName ?? ''}
                                             onChange={(e) =>
@@ -252,7 +190,7 @@ export function RuleEditor({
                                     </label>
                                     <label>
                                         Match header value (exact; empty means any)
-                                        <input
+                                        <Input
                                             aria-label="Breakpoint match header value"
                                             value={current.matchHeaderValue ?? ''}
                                             onChange={(e) =>
@@ -303,11 +241,11 @@ export function RuleEditor({
                                     <label>
                                         Local response file
                                         <div className="inline-input">
-                                            <input
+                                            <Input
                                                 value={current.value}
                                                 onChange={(e) => update({ value: e.target.value })}
                                             />
-                                            <button
+                                            <Button
                                                 title="Choose response file"
                                                 onClick={() =>
                                                     void run(async () => {
@@ -317,12 +255,12 @@ export function RuleEditor({
                                                 }
                                             >
                                                 <FolderOpen size={16} />
-                                            </button>
+                                            </Button>
                                         </div>
                                     </label>
                                     <label>
                                         Content type
-                                        <input
+                                        <Input
                                             value={current.header}
                                             placeholder="application/json"
                                             onChange={(e) => update({ header: e.target.value })}
@@ -330,7 +268,7 @@ export function RuleEditor({
                                     </label>
                                     <label>
                                         Status code
-                                        <input
+                                        <Input
                                             type="number"
                                             min="100"
                                             max="599"
@@ -345,7 +283,7 @@ export function RuleEditor({
                             {current.kind === 'mapRemote' && (
                                 <label>
                                     Destination URL
-                                    <input
+                                    <Input
                                         value={current.value}
                                         placeholder="https://staging.example.com/api"
                                         onChange={(e) => update({ value: e.target.value })}
@@ -368,14 +306,14 @@ export function RuleEditor({
                                     </label>
                                     <label>
                                         Header name
-                                        <input
+                                        <Input
                                             value={current.header}
                                             onChange={(e) => update({ header: e.target.value })}
                                         />
                                     </label>
                                     <label>
                                         Value
-                                        <input
+                                        <Input
                                             value={current.value}
                                             onChange={(e) => update({ value: e.target.value })}
                                         />
@@ -386,7 +324,7 @@ export function RuleEditor({
                             {current.kind === 'throttle' && (
                                 <label>
                                     Delay (milliseconds)
-                                    <input
+                                    <Input
                                         type="number"
                                         min="0"
                                         max="30000"
@@ -408,7 +346,7 @@ export function RuleEditor({
                                     enabled Allow List rule to be forwarded.
                                 </p>
                             )}
-                            <button
+                            <Button
                                 className="danger"
                                 onClick={() => {
                                     setRules(rules.filter((r) => r.id !== current.id))
@@ -416,29 +354,29 @@ export function RuleEditor({
                                 }}
                             >
                                 <Trash2 size={14} /> Delete Rule
-                            </button>
+                            </Button>
                         </>
                     ) : (
                         <div className="subtle-empty">
                             <Settings2 size={32} />
                             <h3>{title}</h3>
                             <p>Create a rule to control matching traffic.</p>
-                            <button className="primary" onClick={add}>
+                            <Button className="primary" onClick={add}>
                                 <Plus size={14} />
                                 Add Rule
-                            </button>
+                            </Button>
                         </div>
                     )}
                 </div>
             </div>
             <footer className="modal-footer">
                 <span className="muted">Rules apply to subsequent requests.</span>
-                <button
+                <Button
                     className="primary"
                     onClick={() => void run(() => window.fluxy.rules(rules), 'Rules saved')}
                 >
                     Save Rules
-                </button>
+                </Button>
             </footer>
         </>
     )
@@ -493,7 +431,7 @@ export function Composer({ transaction, run }: { transaction?: Transaction; run:
                         <option key={m}>{m}</option>
                     ))}
                 </select>
-                <input
+                <Input
                     aria-label="Request URL"
                     value={url}
                     onChange={(e) => setURL(e.target.value)}
@@ -501,15 +439,15 @@ export function Composer({ transaction, run }: { transaction?: Transaction; run:
                         if (e.key === 'Enter') void send()
                     }}
                 />
-                <button className="primary" disabled={sending} onClick={() => void send()}>
+                <Button className="primary" disabled={sending} onClick={() => void send()}>
                     <Send size={14} />
                     {sending ? 'Sending…' : 'Send'}
-                </button>
+                </Button>
             </div>
             <div className="compose-fields">
                 <label>
                     Headers
-                    <textarea
+                    <Textarea
                         spellCheck={false}
                         value={headers}
                         placeholder="Content-Type: application/json"
@@ -518,7 +456,7 @@ export function Composer({ transaction, run }: { transaction?: Transaction; run:
                 </label>
                 <label>
                     Body
-                    <textarea
+                    <Textarea
                         spellCheck={false}
                         value={body}
                         placeholder="Request body"
@@ -578,7 +516,7 @@ export function Preferences({
                         </label>
                         <label>
                             Included hosts
-                            <textarea
+                            <Textarea
                                 value={settings.sslHosts.join('\n')}
                                 onChange={(e) =>
                                     patch({ sslHosts: e.target.value.split('\n').filter(Boolean) })
@@ -595,7 +533,7 @@ export function Preferences({
                         <h3>General</h3>
                         <label>
                             Proxy port
-                            <input
+                            <Input
                                 type="number"
                                 min="1024"
                                 max="65535"
@@ -644,7 +582,7 @@ export function Preferences({
                         </label>
                         <label>
                             Font size
-                            <input
+                            <Input
                                 type="number"
                                 min="10"
                                 max="20"
@@ -654,7 +592,7 @@ export function Preferences({
                         </label>
                         <label>
                             Maximum captured requests
-                            <input
+                            <Input
                                 type="number"
                                 min="100"
                                 max="50000"
@@ -667,14 +605,14 @@ export function Preferences({
             </div>
             <footer className="modal-footer">
                 <span className="muted">Preferences are saved on this device.</span>
-                <button
+                <Button
                     className="primary"
                     onClick={() =>
                         void run(() => window.fluxy.settings(settings), 'Settings saved')
                     }
                 >
                     Save Settings
-                </button>
+                </Button>
             </footer>
         </>
     )
@@ -698,7 +636,7 @@ export function Certificates({ snapshot, run }: { snapshot: Snapshot; run: Run }
                 }}
             />
             <div className="button-row">
-                <button
+                <Button
                     onClick={() =>
                         void run(
                             () => window.fluxy.exportCertificate(),
@@ -708,14 +646,14 @@ export function Certificates({ snapshot, run }: { snapshot: Snapshot; run: Run }
                 >
                     <Download size={14} />
                     Export Certificate
-                </button>
-                <button
+                </Button>
+                <Button
                     className="primary"
                     onClick={() => void run(() => window.fluxy.trustCertificate())}
                 >
                     <ShieldCheck size={14} />
                     Install & Trust on macOS
-                </button>
+                </Button>
             </div>
             <p className="muted">
                 For iOS: export the certificate, install its profile, then enable full trust under
@@ -748,27 +686,27 @@ export function DeveloperSetup({
         <div className="setup-layout">
             <aside>
                 {Object.keys(snippets).map((name) => (
-                    <button
+                    <Button
                         className={target === name ? 'selected' : ''}
                         key={name}
                         onClick={() => setTarget(name)}
                     >
                         {name}
-                    </button>
+                    </Button>
                 ))}
             </aside>
             <main>
                 <h2>{target}</h2>
                 <p className="muted">Connect your development client to Fluxy.</p>
                 <pre>{snippets[target]}</pre>
-                <button
+                <Button
                     onClick={() =>
                         void run(() => window.fluxy.copy(snippets[target]), 'Setup copied')
                     }
                 >
                     <Copy size={14} />
                     Copy Instructions
-                </button>
+                </Button>
             </main>
         </div>
     )
@@ -794,7 +732,7 @@ export function MCPSettings({ snapshot, run }: { snapshot: Snapshot; run: Run })
             </label>
             <label>
                 Port
-                <input
+                <Input
                     type="number"
                     min="1024"
                     max="65535"
@@ -810,7 +748,7 @@ export function MCPSettings({ snapshot, run }: { snapshot: Snapshot; run: Run })
                 />
                 Redact sensitive data before sending to AI
             </label>
-            <button
+            <Button
                 className="primary"
                 onClick={() =>
                     void run(
@@ -826,14 +764,14 @@ export function MCPSettings({ snapshot, run }: { snapshot: Snapshot; run: Run })
                 }
             >
                 Save MCP Settings
-            </button>
+            </Button>
             <h4>Client configuration</h4>
             <p className="muted">
                 The stdio bridge reads the local authentication token from a private handshake file.
                 Paste this configuration into your MCP client.
             </p>
             <pre className="config-code">{snapshot.mcpConfig}</pre>
-            <button
+            <Button
                 onClick={() =>
                     void run(
                         () => window.fluxy.copy(snapshot.mcpConfig),
@@ -843,7 +781,7 @@ export function MCPSettings({ snapshot, run }: { snapshot: Snapshot; run: Run })
             >
                 <Copy size={14} />
                 Copy Configuration
-            </button>
+            </Button>
         </div>
     )
 }
@@ -851,7 +789,7 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
     const [scripts, setScripts] = useState(snapshot.scripts)
     const [selected, setSelected] = useState<string>()
     const current = scripts.find((s) => s.id === selected)
-    const update = (patch: Partial<import('../../shared/model').Script>) =>
+    const update = (patch: Partial<import('@shared/model').Script>) =>
         setScripts((old) => old.map((s) => (s.id === selected ? { ...s, ...patch } : s)))
     const add = () => {
         const id = crypto.randomUUID()
@@ -874,7 +812,7 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
                 <aside className="rule-list">
                     <div className="section-label">{scripts.length} SCRIPTS</div>
                     {scripts.map((s) => (
-                        <button
+                        <Button
                             className={s.id === selected ? 'selected' : ''}
                             key={s.id}
                             onClick={() => setSelected(s.id)}
@@ -886,12 +824,12 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
                                     {s.phase} · {s.pattern}
                                 </small>
                             </span>
-                        </button>
+                        </Button>
                     ))}
-                    <button onClick={add}>
+                    <Button onClick={add}>
                         <Plus size={14} />
                         Add Script
-                    </button>
+                    </Button>
                 </aside>
                 <div className="rule-form">
                     {current ? (
@@ -906,14 +844,14 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
                             </label>
                             <label>
                                 Name
-                                <input
+                                <Input
                                     value={current.name}
                                     onChange={(e) => update({ name: e.target.value })}
                                 />
                             </label>
                             <label>
                                 URL pattern
-                                <input
+                                <Input
                                     value={current.pattern}
                                     onChange={(e) => update({ pattern: e.target.value })}
                                 />
@@ -932,7 +870,7 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
                             </label>
                             <label>
                                 JavaScript
-                                <textarea
+                                <Textarea
                                     className="script-editor"
                                     aria-label="Script code"
                                     spellCheck={false}
@@ -946,7 +884,7 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
                                 Scripts have no filesystem, Node.js, or network access. Maximum
                                 body: 2 MB; timeout: 5 seconds.
                             </p>
-                            <button
+                            <Button
                                 className="danger"
                                 onClick={() => {
                                     setScripts(scripts.filter((s) => s.id !== current.id))
@@ -955,16 +893,16 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
                             >
                                 <Trash2 size={14} />
                                 Delete Script
-                            </button>
+                            </Button>
                         </>
                     ) : (
                         <div className="subtle-empty">
                             <Code2 size={32} />
                             <h3>Scripting</h3>
                             <p>Transform requests and responses with JavaScript.</p>
-                            <button className="primary" onClick={add}>
+                            <Button className="primary" onClick={add}>
                                 Add Script
-                            </button>
+                            </Button>
                         </div>
                     )}
                 </div>
@@ -973,12 +911,12 @@ export function ScriptingEditor({ snapshot, run }: { snapshot: Snapshot; run: Ru
                 <span className="muted">
                     On failure, original traffic is preserved and the error appears in Logs.
                 </span>
-                <button
+                <Button
                     className="primary"
                     onClick={() => void run(() => window.fluxy.scripts(scripts), 'Scripts saved')}
                 >
                     Save Scripts
-                </button>
+                </Button>
             </footer>
         </>
     )
@@ -999,7 +937,7 @@ export function UpstreamSettings({ snapshot, run }: { snapshot: Snapshot; run: R
             </label>
             <label>
                 Proxy or PAC URL
-                <input
+                <Input
                     value={config.url}
                     onChange={(e) => setConfig({ ...config, url: e.target.value })}
                 />
@@ -1010,7 +948,7 @@ export function UpstreamSettings({ snapshot, run }: { snapshot: Snapshot; run: R
             </label>
             <label>
                 Bypass hosts
-                <textarea
+                <Textarea
                     value={config.bypass.join('\n')}
                     onChange={(e) =>
                         setConfig({ ...config, bypass: e.target.value.split('\n').filter(Boolean) })
@@ -1022,7 +960,7 @@ export function UpstreamSettings({ snapshot, run }: { snapshot: Snapshot; run: R
                 Encrypted CONNECT tunnels outside SSL inspection are blocked while upstream routing
                 is enabled, unless their host is in the bypass list.
             </p>
-            <button
+            <Button
                 className="primary"
                 onClick={() =>
                     void run(
@@ -1032,7 +970,7 @@ export function UpstreamSettings({ snapshot, run }: { snapshot: Snapshot; run: R
                 }
             >
                 Save Upstream Settings
-            </button>
+            </Button>
         </div>
     )
 }

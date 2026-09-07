@@ -1,7 +1,10 @@
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import type { Run } from '@/types/actions'
 import { useState, useEffect } from 'react'
-import { breakpointTemplateSchema, type Snapshot, type Transaction } from '../../shared/model'
-import { breakpointMessage, parseBreakpointMessage } from '../../shared/breakpoints'
-import type { Run } from './Inspector'
+import { breakpointTemplateSchema, type Snapshot, type Transaction } from '@shared/model'
+import { breakpointMessage, parseBreakpointMessage } from '@shared/breakpoints'
 
 const savedDrafts = new Map<string, string>()
 export function pruneBreakpointDrafts(transactions: Transaction[]) {
@@ -79,7 +82,7 @@ function PauseEditor({
             </label>
             <label>
                 HTTP message
-                <textarea
+                <Textarea
                     aria-label="Breakpoint HTTP message"
                     rows={15}
                     value={raw}
@@ -87,7 +90,7 @@ function PauseEditor({
                 />
             </label>
             <div className="button-row">
-                <button
+                <Button
                     className="primary"
                     onClick={() =>
                         void run(() =>
@@ -105,23 +108,23 @@ function PauseEditor({
                     }
                 >
                     Apply and Continue
-                </button>
-                <button onClick={() => void run(() => window.fluxy.breakpoint(t.id, 'continue'))}>
+                </Button>
+                <Button onClick={() => void run(() => window.fluxy.breakpoint(t.id, 'continue'))}>
                     Continue Unchanged
-                </button>
-                <button onClick={() => void run(() => window.fluxy.breakpoint(t.id, 'abort'))}>
+                </Button>
+                <Button onClick={() => void run(() => window.fluxy.breakpoint(t.id, 'abort'))}>
                     Abort
-                </button>
+                </Button>
             </div>
             <label>
                 Template name
-                <input
+                <Input
                     aria-label="Breakpoint template name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                 />
             </label>
-            <button
+            <Button
                 disabled={!name.trim()}
                 onClick={() =>
                     void run(async () => {
@@ -145,7 +148,7 @@ function PauseEditor({
                 }
             >
                 Save as Template
-            </button>
+            </Button>
             <p className="muted">
                 Paused messages wait until you continue, abort, stop capture, or the client
                 disconnects. Binary, compressed and bodies over 2 MB remain byte-for-byte unchanged.
@@ -169,7 +172,7 @@ export function BreakpointQueue({ snapshot, run }: { snapshot: Snapshot; run: Ru
         <div className="rule-layout">
             <aside className="rule-list">
                 <strong>{paused.length} paused</strong>
-                <button
+                <Button
                     disabled={!paused.length}
                     onClick={() =>
                         void run(() =>
@@ -189,35 +192,35 @@ export function BreakpointQueue({ snapshot, run }: { snapshot: Snapshot; run: Ru
                     }
                 >
                     Apply All and Continue
-                </button>
-                <button
+                </Button>
+                <Button
                     disabled={!paused.length}
                     onClick={() => void run(() => window.fluxy.breakpoints('continue'))}
                 >
                     Continue All Unchanged
-                </button>
-                <button
+                </Button>
+                <Button
                     disabled={!paused.length}
                     onClick={() => void run(() => window.fluxy.breakpoints('abort'))}
                 >
                     Abort All
-                </button>
+                </Button>
                 <div className="button-row">
-                    <button
+                    <Button
                         disabled={!current || paused.indexOf(current) === 0}
                         onClick={() => setSelected(paused[paused.indexOf(current) - 1].id)}
                     >
                         Previous
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         disabled={!current || paused.indexOf(current) === paused.length - 1}
                         onClick={() => setSelected(paused[paused.indexOf(current) + 1].id)}
                     >
                         Next
-                    </button>
+                    </Button>
                 </div>
                 {paused.map((t) => (
-                    <button
+                    <Button
                         key={t.id}
                         onClick={() => setSelected(t.id)}
                         className={current?.id === t.id ? 'selected' : ''}
@@ -226,7 +229,7 @@ export function BreakpointQueue({ snapshot, run }: { snapshot: Snapshot; run: Ru
                         <small>
                             {t.breakpointPhase} · {t.host} · {t.client} · {t.breakpointRuleName}
                         </small>
-                    </button>
+                    </Button>
                 ))}
             </aside>
             {current ? (
@@ -263,7 +266,7 @@ export function BreakpointTemplates({ snapshot, run }: { snapshot: Snapshot; run
         <div className="rule-layout">
             <aside className="rule-list">
                 {snapshot.templates.map((t) => (
-                    <button
+                    <Button
                         key={t.id}
                         onClick={() => {
                             setID(t.id)
@@ -274,9 +277,9 @@ export function BreakpointTemplates({ snapshot, run }: { snapshot: Snapshot; run
                     >
                         {t.name}
                         <small>{t.phase}</small>
-                    </button>
+                    </Button>
                 ))}
-                <button
+                <Button
                     onClick={() => {
                         setID('')
                         setName('')
@@ -285,12 +288,12 @@ export function BreakpointTemplates({ snapshot, run }: { snapshot: Snapshot; run
                     }}
                 >
                     New Template
-                </button>
+                </Button>
             </aside>
             <div className="settings-form">
                 <label>
                     Name
-                    <input
+                    <Input
                         aria-label="Template name"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
@@ -309,7 +312,7 @@ export function BreakpointTemplates({ snapshot, run }: { snapshot: Snapshot; run
                 </label>
                 <label>
                     HTTP message
-                    <textarea
+                    <Textarea
                         aria-label="Template HTTP message"
                         rows={15}
                         value={message}
@@ -317,7 +320,7 @@ export function BreakpointTemplates({ snapshot, run }: { snapshot: Snapshot; run
                     />
                 </label>
                 <div className="button-row">
-                    <button
+                    <Button
                         disabled={!name.trim()}
                         onClick={() =>
                             void run(async () => {
@@ -337,8 +340,8 @@ export function BreakpointTemplates({ snapshot, run }: { snapshot: Snapshot; run
                         }
                     >
                         Save Template
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         disabled={!id}
                         onClick={() =>
                             void run(async () => {
@@ -351,7 +354,7 @@ export function BreakpointTemplates({ snapshot, run }: { snapshot: Snapshot; run
                         }
                     >
                         Delete Template
-                    </button>
+                    </Button>
                 </div>
             </div>
         </div>

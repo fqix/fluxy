@@ -1,0 +1,54 @@
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities) source(none);
+@import 'tw-animate-css';
+@import './app.css';
+@source '../';
+
+/* Existing desktop styles supply the reset. Keep Tailwind Preflight out of native controls. */
+@custom-variant dark {
+    &:where([data-theme='dark'], [data-theme='dark'] *) {
+        @slot;
+    }
+    @media (prefers-color-scheme: dark) {
+        &:where([data-theme='system'], [data-theme='system'] *) {
+            @slot;
+        }
+    }
+}
+
+/* shadcn semantic colors follow Fluxy's existing light, dark and system themes. */
+@theme inline {
+    --color-background: var(--bg);
+    --color-foreground: var(--text);
+    --color-card: var(--surface);
+    --color-card-foreground: var(--text);
+    --color-popover: var(--bg);
+    --color-popover-foreground: var(--text);
+    --color-primary: var(--accent);
+    --color-primary-foreground: #fff;
+    --color-secondary: var(--surface);
+    --color-secondary-foreground: var(--text);
+    --color-muted: var(--surface);
+    --color-muted-foreground: var(--muted);
+    --color-accent: var(--hover);
+    --color-accent-foreground: var(--text);
+    --color-destructive: var(--red);
+    --color-destructive-foreground: #fff;
+    --color-border: var(--line);
+    --color-input: var(--line);
+    --color-field: var(--field);
+    --color-ring: var(--accent);
+    --radius-sm: 3px;
+    --radius-md: 4px;
+    --radius-lg: 6px;
+    --radius-xl: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-slot='button'],
+    [data-slot='input'],
+    [data-slot='textarea'] {
+        transition: none;
+    }
+}

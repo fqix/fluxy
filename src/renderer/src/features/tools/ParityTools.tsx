@@ -1,8 +1,11 @@
-import { terminalEnvironment } from '../../shared/setup'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import type { Run } from '@/types/actions'
+import { terminalEnvironment } from '@shared/setup'
 import { useState } from 'react'
-import type { Snapshot, Transaction } from '../../shared/model'
-import type { ProjectAction } from '../../shared/projects'
-import type { Run } from './Inspector'
+import type { Snapshot, Transaction } from '@shared/model'
+import type { ProjectAction } from '@shared/projects'
 
 export function ProjectManager({
     snapshot,
@@ -32,24 +35,24 @@ export function ProjectManager({
                     </p>
                     {snapshot.projects.projects.map((p) => (
                         <div className="button-row" key={p.id}>
-                            <button
+                            <Button
                                 disabled={p.id === active.id}
                                 onClick={() => void run(() => change({ kind: 'switch', id: p.id }))}
                             >
                                 {p.id === active.id ? '✓ ' : ''}
                                 {p.name} · {p.tabs.length} tabs
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                                 disabled={snapshot.projects.projects.length <= 1}
                                 onClick={() => void run(() => change({ kind: 'delete', id: p.id }))}
                             >
                                 Delete {p.name}
-                            </button>
+                            </Button>
                         </div>
                     ))}
                     <label>
                         Project name
-                        <input
+                        <Input
                             aria-label="Project name"
                             value={name}
                             maxLength={100}
@@ -57,33 +60,33 @@ export function ProjectManager({
                         />
                     </label>
                     <div className="button-row">
-                        <button
+                        <Button
                             disabled={!name.trim()}
                             onClick={() => void run(() => change({ kind: 'create', name }))}
                         >
                             New Project
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                             disabled={!name.trim()}
                             onClick={() =>
                                 void run(() => change({ kind: 'rename', id: active.id, name }))
                             }
                         >
                             Rename Active Project
-                        </button>
-                        <button onClick={() => void run(exportProject)}>
+                        </Button>
+                        <Button onClick={() => void run(exportProject)}>
                             Export Configuration
-                        </button>
-                        <button onClick={() => void run(importProject)}>
+                        </Button>
+                        <Button onClick={() => void run(importProject)}>
                             Import Configuration
-                        </button>
+                        </Button>
                     </div>
                 </>
             )}
             {snapshot.projectError && (
-                <button onClick={() => void run(() => change({ kind: 'repair' }))}>
+                <Button onClick={() => void run(() => change({ kind: 'repair' }))}>
                     Repair Projects
-                </button>
+                </Button>
             )}
         </div>
     )
@@ -111,7 +114,7 @@ export function RequestNote({
         >
             <label>
                 Request note
-                <textarea
+                <Textarea
                     autoFocus
                     aria-label="Request note"
                     maxLength={100000}
@@ -119,7 +122,7 @@ export function RequestNote({
                     onChange={(e) => setNote(e.target.value)}
                 />
             </label>
-            <button className="primary">Save Note</button>
+            <Button className="primary">Save Note</Button>
         </form>
     )
 }
@@ -145,7 +148,7 @@ export function InspectionSettings({
                     </p>
                     <label>
                         Hosts
-                        <textarea
+                        <Textarea
                             aria-label="Bypass hosts"
                             rows={12}
                             value={bypass}
@@ -178,7 +181,7 @@ export function InspectionSettings({
                     <p>Add request or response headers as columns in the traffic table.</p>
                     {columns.map((column, i) => (
                         <div className="button-row" key={column.id}>
-                            <input
+                            <Input
                                 aria-label={`Column ${i + 1} name`}
                                 placeholder="Column name"
                                 value={column.name}
@@ -190,7 +193,7 @@ export function InspectionSettings({
                                     )
                                 }
                             />
-                            <input
+                            <Input
                                 aria-label={`Column ${i + 1} header`}
                                 placeholder="Header name"
                                 value={column.header}
@@ -224,16 +227,16 @@ export function InspectionSettings({
                                 <option value="request">Request</option>
                                 <option value="response">Response</option>
                             </select>
-                            <button
+                            <Button
                                 onClick={() =>
                                     setColumns(columns.filter((c) => c.id !== column.id))
                                 }
                             >
                                 Remove
-                            </button>
+                            </Button>
                         </div>
                     ))}
-                    <button
+                    <Button
                         disabled={columns.length >= 20}
                         onClick={() =>
                             setColumns([
@@ -248,10 +251,10 @@ export function InspectionSettings({
                         }
                     >
                         Add Header Column
-                    </button>
+                    </Button>
                 </>
             )}
-            <button
+            <Button
                 className="primary"
                 onClick={() =>
                     void run(
@@ -274,7 +277,7 @@ export function InspectionSettings({
                 }
             >
                 Save Settings
-            </button>
+            </Button>
         </div>
     )
 }
@@ -292,17 +295,17 @@ export function PublishGist({ ids, run }: { ids: string[]; run: Run }) {
                 inspect URLs and payloads for other private data. Secret gists can be read by anyone
                 with their link.
             </p>
-            <button
+            <Button
                 onClick={() => void run(async () => setReview(await window.fluxy.gistReview(ids)))}
             >
                 Preview Selected Requests
-            </button>
+            </Button>
             {review && (
                 <>
                     <pre className="review-context">{review.content}</pre>
                     <label>
                         Description
-                        <input
+                        <Input
                             value={description}
                             maxLength={500}
                             onChange={(e) => setDescription(e.target.value)}
@@ -310,7 +313,7 @@ export function PublishGist({ ids, run }: { ids: string[]; run: Run }) {
                     </label>
                     <label>
                         GitHub token (Gists write permission)
-                        <input
+                        <Input
                             aria-label="GitHub token"
                             type="password"
                             autoComplete="off"
@@ -326,7 +329,7 @@ export function PublishGist({ ids, run }: { ids: string[]; run: Run }) {
                         />
                         Public gist
                     </label>
-                    <button
+                    <Button
                         className="primary"
                         disabled={!token.trim()}
                         onClick={() =>
@@ -349,15 +352,15 @@ export function PublishGist({ ids, run }: { ids: string[]; run: Run }) {
                         }
                     >
                         Publish Reviewed HAR to GitHub
-                    </button>
+                    </Button>
                 </>
             )}
             {url && (
                 <>
                     <p role="status">Published: {url}</p>
-                    <button onClick={() => void run(() => window.fluxy.copy(url), 'Link copied')}>
+                    <Button onClick={() => void run(() => window.fluxy.copy(url), 'Link copied')}>
                         Copy Gist Link
-                    </button>
+                    </Button>
                 </>
             )}
         </div>
@@ -379,7 +382,7 @@ export function ProtobufSettings({ snapshot, run }: { snapshot: Snapshot; run: R
             {snapshot.settings.protobufSchemas.map((s) => (
                 <div className="button-row" key={s.id}>
                     <span>{s.name}</span>
-                    <button
+                    <Button
                         onClick={() =>
                             void run(() =>
                                 window.fluxy.settings({
@@ -393,12 +396,12 @@ export function ProtobufSettings({ snapshot, run }: { snapshot: Snapshot; run: R
                         }
                     >
                         Remove
-                    </button>
+                    </Button>
                 </div>
             ))}
             <label>
                 Schema name
-                <input
+                <Input
                     aria-label="Schema name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -406,14 +409,14 @@ export function ProtobufSettings({ snapshot, run }: { snapshot: Snapshot; run: R
             </label>
             <label>
                 Schema source
-                <textarea
+                <Textarea
                     aria-label="Protobuf schema"
                     rows={14}
                     value={source}
                     onChange={(e) => setSource(e.target.value)}
                 />
             </label>
-            <button
+            <Button
                 onClick={() =>
                     void run(async () => {
                         await window.fluxy.settings({
@@ -428,12 +431,12 @@ export function ProtobufSettings({ snapshot, run }: { snapshot: Snapshot; run: R
                 }
             >
                 Add Schema
-            </button>
-            <button
+            </Button>
+            <Button
                 onClick={() => void run(async () => setTypes(await window.fluxy.protobufTypes()))}
             >
                 Load Message Types
-            </button>
+            </Button>
             <label>
                 Message type
                 <select
@@ -486,17 +489,17 @@ export function CustomCertificateSettings({ snapshot, run }: { snapshot: Snapsho
                         <br />
                         Expires: {c.expires}
                     </p>
-                    <button
+                    <Button
                         disabled={snapshot.running}
                         onClick={() => void run(() => window.fluxy.deleteCustomCertificate(c.id))}
                     >
                         Delete {c.name}
-                    </button>
+                    </Button>
                 </div>
             ))}
             <label>
                 Name
-                <input
+                <Input
                     aria-label="Certificate name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -517,7 +520,7 @@ export function CustomCertificateSettings({ snapshot, run }: { snapshot: Snapsho
             {kind !== 'root' && (
                 <label>
                     Host pattern
-                    <input
+                    <Input
                         aria-label="Certificate host"
                         value={host}
                         onChange={(e) => setHost(e.target.value)}
@@ -527,7 +530,7 @@ export function CustomCertificateSettings({ snapshot, run }: { snapshot: Snapsho
             )}
             <label>
                 Import password
-                <input
+                <Input
                     aria-label="Certificate password"
                     type="password"
                     autoComplete="off"
@@ -535,7 +538,7 @@ export function CustomCertificateSettings({ snapshot, run }: { snapshot: Snapsho
                     onChange={(e) => setPassword(e.target.value)}
                 />
             </label>
-            <button
+            <Button
                 disabled={
                     snapshot.running || !name.trim() || Boolean(snapshot.customCertificateError)
                 }
@@ -555,7 +558,7 @@ export function CustomCertificateSettings({ snapshot, run }: { snapshot: Snapsho
                 }
             >
                 Import Certificate and Key…
-            </button>
+            </Button>
         </div>
     )
 }
@@ -575,7 +578,7 @@ export function AutomaticSetup({ snapshot, run }: { snapshot: Snapshot; run: Run
                 remove that value in the prepared terminal to capture local services.
             </p>
             <div className="button-row">
-                <button
+                <Button
                     onClick={() =>
                         void run(
                             async () =>
@@ -585,8 +588,8 @@ export function AutomaticSetup({ snapshot, run }: { snapshot: Snapshot; run: Run
                     }
                 >
                     Prepare and Copy Environment
-                </button>
-                <button
+                </Button>
+                <Button
                     className="primary"
                     onClick={() =>
                         void run(
@@ -596,7 +599,7 @@ export function AutomaticSetup({ snapshot, run }: { snapshot: Snapshot; run: Run
                     }
                 >
                     Open Prepared Terminal
-                </button>
+                </Button>
             </div>
         </div>
     )

@@ -13,7 +13,7 @@ Exact npm versions and dependency resolution are recorded in
 Transitive dependencies have their own licenses and notices, which must be
 retained when distributing them.
 
-### Runtime dependencies
+### Runtime components (including bundled renderer code)
 
 | Package                     | Locked version | License                   |
 | --------------------------- | -------------- | ------------------------- |
@@ -35,6 +35,8 @@ Lucide's license also includes MIT terms for portions derived from Feather:
 copyright 2013–2026 Cole Bemis; other portions are copyright 2026 Lucide
 Contributors. Preserve both parts of its license. Node Forge offers a choice of
 BSD-3-Clause or GPL-2.0, as recorded above and in its package license.
+
+The renderer uses locally maintained shadcn/ui components styled with Tailwind CSS. Their source is adapted from the official `new-york-v4` registry. The shadcn/ui MIT license is included at `resources/licenses/shadcn-ui.txt`. Bundled renderer dependency license texts (React, React DOM, Scheduler, Lucide, Radix Slot/Compose Refs, class-variance-authority, clsx and tailwind-merge), plus Tailwind CSS and tw-animate-css notices, are retained under `licenses/` in the app archive. These npm packages are build-time dependencies because their used code is compiled into the renderer.
 
 ### Development and packaging dependencies
 
