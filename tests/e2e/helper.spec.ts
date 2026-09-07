@@ -109,7 +109,7 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         await expect(welcome.getByRole('status')).toHaveText('0 of 4 complete')
         await welcome.getByRole('button', { name: 'Install Helper', exact: true }).click()
         // Installing copies and verifies the bundled binaries before starting the helper.
-        // Cold Intel runners can exceed Playwright's default five-second assertion limit.
+        // Allow bounded startup time for the real signed application and helper.
         await expect(welcome.getByRole('status')).toHaveText('1 of 4 complete', {
             timeout: 20000
         })

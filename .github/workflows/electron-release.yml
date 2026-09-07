@@ -84,7 +84,9 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm
       - run: npm test
       - run: npm run build
-      - run: npx playwright test
+      # The upstream Intel Electron development app is unsigned. The helper's
+      # native caller authentication must be exercised against the signed package.
+      - run: npx playwright test --grep-invert 'helper\.spec\.ts'
         if: runner.os == 'macOS'
       - run: powershell -NoProfile -File tools/install/test-windows.ps1
         if: runner.os == 'Windows'
@@ -115,7 +117,14 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           if [ "${{ matrix.arch }}" = x64 ]; then app_dir=mac; else app_dir=mac-arm64; fi
-          FLUXY_TEST_EXECUTABLE="$PWD/dist/$app_dir/Fluxy.app/Contents/MacOS/Fluxy" npx playwright test tests/e2e/desktop.spec.ts tests/e2e/har-protocols.spec.ts tests/e2e/ui-theme.spec.ts tests/e2e/update-download.spec.ts
+          FLUXY_TEST_EXECUTABLE="$PWD/dist/$app_dir/Fluxy.app/Contents/MacOS/Fluxy" npx playwright test tests/e2e/desktop.spec.ts tests/e2e/har-protocols.spec.ts tests/e2e/helper.spec.ts tests/e2e/ui-theme.spec.ts tests/e2e/update-download.spec.ts
+      - name: Upload desktop test diagnostics
+        if: failure() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-test-diagnostics-${{ matrix.arch }}
+          path: test-results/
+          retention-days: 7
       - name: Prepare installers and checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}
