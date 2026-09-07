@@ -207,6 +207,13 @@ export interface ScriptMessage {
 }
 export type ComposeRequest = z.infer<typeof composeSchema>
 export type Headers = Record<string, string>
+export const frameSchema = z.object({
+    id: z.string().uuid(),
+    time: z.number().finite(),
+    direction: z.enum(['send', 'receive']),
+    body: z.string().max(131072),
+    binary: z.boolean()
+})
 export interface Frame {
     id: string
     time: number
@@ -427,6 +434,12 @@ export function matchesRule(rule: Rule, method: string, url: string): boolean {
 }
 export function contentKind(t: Transaction): string {
     if (t.frames.length || t.protocol === 'WebSocket') return 'WebSocket'
+    if (
+        [t.requestHeaders['content-type'], t.responseHeaders['content-type']].some((ct) =>
+            /^application\/grpc(?:[+;\s]|$|-web(?:[+;\s]|$|text(?:[+;\s]|$)))/i.test(ct ?? '')
+        )
+    )
+        return 'gRPC'
     if (/graphql/i.test(t.path) || /"query"\s*:/.test(t.requestBody)) return 'GraphQL'
     const ct = t.responseHeaders['content-type'] ?? ''
     if (ct.includes('json')) return 'JSON'
@@ -507,17 +520,7 @@ export const transactionSchema: z.ZodType<Transaction> = z.object({
     ssl: z.boolean(),
     error: z.string().optional(),
     rule: z.string().optional(),
-    frames: z
-        .array(
-            z.object({
-                id: z.string().uuid(),
-                time: z.number(),
-                direction: z.enum(['send', 'receive']),
-                body: z.string().max(131072),
-                binary: z.boolean()
-            })
-        )
-        .max(1000),
+    frames: z.array(frameSchema).max(1000),
     pinned: z.boolean(),
     saved: z.boolean(),
     note: z.string().max(100000),

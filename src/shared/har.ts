@@ -1,7 +1,7 @@
 import { timingSchema } from './timing'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { highlightSchema, type Transaction } from './model'
+import { frameSchema, highlightSchema, type Transaction } from './model'
 
 export function toHAR(items: Transaction[]) {
     const headers = (h: Record<string, string>) =>
@@ -44,7 +44,7 @@ export function toHAR(items: Transaction[]) {
                         size: t.responseBytes,
                         mimeType: t.responseHeaders['content-type'] || 'application/octet-stream',
                         text: t.responseBase64 ?? t.responseBody,
-                        ...(t.responseBase64 ? { encoding: 'base64' } : {})
+                        ...(t.responseBase64 !== undefined ? { encoding: 'base64' } : {})
                     },
                     redirectURL: t.responseHeaders.location ?? '',
                     headersSize: -1,
@@ -60,6 +60,7 @@ export function toHAR(items: Transaction[]) {
                     : { send: 0, wait: t.duration, receive: 0 },
                 comment: t.note,
                 _fluxy: {
+                    protocol: t.protocol,
                     highlight: t.highlight,
                     requestBase64: t.requestBase64,
                     pinned: t.pinned,
@@ -90,6 +91,8 @@ const entrySchema = z.object({
         bodySize: z.number().default(0),
         postData: z
             .object({
+                mimeType: z.string().max(1000).optional(),
+                _encoding: z.literal('base64').optional(),
                 text: z
                     .string()
                     .max(4 * 1024 * 1024)
@@ -101,8 +104,10 @@ const entrySchema = z.object({
         status: z.number().int().min(0).max(599),
         statusText: z.string().default(''),
         headers: headerSchema,
+        _trailers: headerSchema,
         content: z
             .object({
+                mimeType: z.string().max(1000).optional(),
                 size: z.number().default(0),
                 text: z
                     .string()
@@ -113,8 +118,25 @@ const entrySchema = z.object({
             .default({ size: 0, text: '' })
     }),
     comment: z.string().max(100000).default(''),
+    _webSocketMessages: z
+        .array(
+            z.object({
+                type: z.enum(['send', 'receive']),
+                time: z.number().finite().nonnegative().max(8640000000000),
+                opcode: z.number().int().min(0).max(15),
+                data: z.string().max(131072)
+            })
+        )
+        .max(1000)
+        .optional(),
     _fluxy: z
         .object({
+            protocol: z.string().max(30).optional(),
+            frames: z.array(frameSchema).max(1000).optional(),
+            pinned: z.boolean().optional(),
+            saved: z.boolean().optional(),
+            truncated: z.boolean().optional(),
+            error: z.string().max(100000).optional(),
             highlight: highlightSchema.optional(),
             requestBase64: z
                 .string()
@@ -130,6 +152,49 @@ export function fromHAR(input: unknown): Transaction[] {
     return har.log.entries.map((e, i) => {
         const url = new URL(e.request.url)
         const binary = e.response.content.encoding === 'base64'
+        const requestHeaderEntries = [...e.request.headers]
+        const responseHeaderEntries = [...e.response.headers]
+        for (const trailer of e.response._trailers) {
+            if (
+                !responseHeaderEntries.some(
+                    (h) =>
+                        h.name.toLowerCase() === trailer.name.toLowerCase() &&
+                        h.value === trailer.value
+                )
+            )
+                responseHeaderEntries.push(trailer)
+        }
+        for (const [headers, mime] of [
+            [requestHeaderEntries, e.request.postData?.mimeType],
+            [responseHeaderEntries, e.response.content.mimeType]
+        ] as const) {
+            if (mime && !headers.some((h) => h.name.toLowerCase() === 'content-type'))
+                headers.push({ name: 'Content-Type', value: mime })
+        }
+        const requestHeaders = Object.fromEntries(
+            requestHeaderEntries.map((h) => [h.name.toLowerCase(), h.value])
+        )
+        const responseHeaders = Object.fromEntries(
+            responseHeaderEntries.map((h) => [h.name.toLowerCase(), h.value])
+        )
+        const frames =
+            e._fluxy?.frames ??
+            e._webSocketMessages?.map((f) => ({
+                id: randomUUID(),
+                time: f.time * 1000,
+                direction: f.type,
+                body: f.data,
+                binary: f.opcode === 2
+            })) ??
+            []
+        const websocket =
+            /^wss?:$/.test(url.protocol) ||
+            frames.length > 0 ||
+            e._fluxy?.protocol === 'WebSocket' ||
+            (e.response.status === 101 && responseHeaders.upgrade?.toLowerCase() === 'websocket')
+        const requestBase64 =
+            e._fluxy?.requestBase64 ??
+            (e.request.postData?._encoding === 'base64' ? e.request.postData.text : undefined)
         return {
             id: randomUUID(),
             sequence: i + 1,
@@ -138,19 +203,15 @@ export function fromHAR(input: unknown): Transaction[] {
             url: url.href,
             host: url.hostname,
             path: url.pathname + url.search,
-            protocol: url.protocol.startsWith('https') ? 'HTTPS' : 'HTTP',
+            protocol: websocket ? 'WebSocket' : url.protocol === 'https:' ? 'HTTPS' : 'HTTP',
             client: 'Imported',
-            requestHeaderEntries: e.request.headers,
-            responseHeaderEntries: e.response.headers,
+            requestHeaderEntries,
+            responseHeaderEntries,
             state: e.response.status ? 'completed' : 'error',
             status: e.response.status,
             statusMessage: e.response.statusText,
-            requestHeaders: Object.fromEntries(
-                e.request.headers.map((h) => [h.name.toLowerCase(), h.value])
-            ),
-            responseHeaders: Object.fromEntries(
-                e.response.headers.map((h) => [h.name.toLowerCase(), h.value])
-            ),
+            requestHeaders,
+            responseHeaders,
             requestBody: e.request.postData?.text ?? '',
             responseBody: binary
                 ? Buffer.from(e.response.content.text, 'base64').toString('utf8')
@@ -167,13 +228,15 @@ export function fromHAR(input: unknown): Transaction[] {
                       total: e.time
                   })
                 : undefined,
-            ssl: url.protocol === 'https:',
-            frames: [],
-            pinned: false,
-            saved: false,
+            ssl: url.protocol === 'https:' || url.protocol === 'wss:',
+            frames,
+            pinned: e._fluxy?.pinned ?? false,
+            saved: e._fluxy?.saved ?? false,
+            truncated: e._fluxy?.truncated,
+            error: e._fluxy?.error,
             note: e.comment,
             highlight: e._fluxy?.highlight,
-            requestBase64: e._fluxy?.requestBase64
+            requestBase64
         }
     })
 }

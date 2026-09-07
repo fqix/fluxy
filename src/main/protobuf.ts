@@ -20,7 +20,8 @@ export function decodeProtobuf(
     typeName: string,
     bytes: Buffer,
     grpc = false,
-    encoding = ''
+    encoding = '',
+    grpcWeb = false
 ) {
     const type = compileProtobuf(schemas).root.lookupType(typeName)
     const decode = (value: Buffer) =>
@@ -41,6 +42,12 @@ export function decodeProtobuf(
         if (length > 2 * 1024 * 1024 || offset + length > bytes.length)
             throw new Error('Truncated or oversized gRPC message')
         let body = bytes.subarray(offset, offset + length)
+        if (grpcWeb && flag === 0x80) {
+            if (offset + length !== bytes.length)
+                throw new Error('gRPC-Web trailers must be the final frame')
+            offset += length
+            continue
+        }
         if (flag === 1 && encoding === 'gzip')
             body = gunzipSync(body, { maxOutputLength: 2 * 1024 * 1024 })
         else if (flag !== 0) throw new Error('Unsupported gRPC compression')

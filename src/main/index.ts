@@ -312,7 +312,8 @@ exec /bin/zsh -i
             type,
             bytes,
             (headers['content-type'] ?? '').includes('grpc'),
-            headers['grpc-encoding']
+            headers['grpc-encoding'],
+            /^application\/grpc-web(?:[+;\s]|$)/i.test(headers['content-type'] ?? '')
         )
     })
     handle('gist:review', (input) => {

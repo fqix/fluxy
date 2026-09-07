@@ -1,4 +1,4 @@
-import { pretty, type Transaction } from './model'
+import { contentKind, pretty, type Transaction } from './model'
 export interface ProtocolPanel {
     title: string
     fields: Record<string, string>
@@ -20,6 +20,27 @@ export function protocolPanels(t: Transaction): ProtocolPanel[] {
     const request = object(parse(t.requestBody)),
         response = object(parse(t.responseBody))
     const panels: ProtocolPanel[] = []
+    if (contentKind(t) === 'gRPC') {
+        const parts = t.path.split('?')[0].split('/')
+        let message = t.responseHeaders['grpc-message'] ?? ''
+        try {
+            message = decodeURIComponent(message)
+        } catch {
+            /* Keep malformed metadata readable. */
+        }
+        panels.push({
+            title: 'gRPC',
+            fields: {
+                Service: parts.at(-2) ?? '',
+                Method: parts.at(-1) ?? '',
+                'HTTP status': String(t.status ?? ''),
+                'gRPC status': t.responseHeaders['grpc-status'] ?? 'Not supplied',
+                Message: message,
+                Encoding: t.responseHeaders['grpc-encoding'] ?? 'identity'
+            },
+            body: 'Select a message type in Protobuf settings to decode the captured messages.'
+        })
+    }
     if (typeof request.query === 'string') {
         const operation = /^\s*(query|mutation|subscription)\s*(\w+)?/.exec(request.query)
         panels.push({

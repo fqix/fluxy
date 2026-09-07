@@ -117,6 +117,7 @@ const filters = [
     'HTTP',
     'HTTPS',
     'WebSocket',
+    'gRPC',
     'AI API',
     'Web3',
     'RPC Error',
@@ -146,7 +147,11 @@ function filterMatch(t: Transaction, filter: string) {
         )
     if (filter === 'Web3') return /"jsonrpc"\s*:/.test(t.requestBody)
     if (filter === 'RPC Error')
-        return /"jsonrpc"\s*:/.test(t.requestBody) && /"error"\s*:/.test(t.responseBody)
+        return (
+            (/"jsonrpc"\s*:/.test(t.requestBody) && /"error"\s*:/.test(t.responseBody)) ||
+            (contentKind(t) === 'gRPC' &&
+                /^(?:[1-9]|1[0-6])$/.test(t.responseHeaders['grpc-status'] ?? ''))
+        )
     return contentKind(t) === filter
 }
 function iconFor(client: string) {
