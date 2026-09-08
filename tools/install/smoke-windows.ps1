@@ -20,14 +20,16 @@ foreach ($shell in @('powershell.exe', 'pwsh.exe')) {
     & $shell -NoProfile -NonInteractive -File $child *> $log
     $exitCode = $LASTEXITCODE
     Get-Content -LiteralPath $log
+    $installLog = Join-Path $env:TEMP 'fluxy-install.log'
+    if (Test-Path -LiteralPath $installLog) { Copy-Item -LiteralPath $installLog -Destination (Join-Path $results "$shell-install.log") }
     if ($exitCode -ne 0) { throw "$shell exited with code $exitCode" }
     if (!(Select-String -LiteralPath $log -SimpleMatch 'FLUXY_INSTALL_SHELL_SURVIVED' -Quiet)) {
         throw "$shell did not reach the end of the installation command"
     }
     $entry = Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall |
         Get-ItemProperty | Where-Object { $_.DisplayName -eq 'Fluxy' } | Select-Object -First 1
-    if (!$entry -or !$entry.InstallLocation) { throw 'Fluxy per-user uninstall registration is missing' }
-    $executable = Join-Path $entry.InstallLocation 'Fluxy.exe'
+    if (!$entry -or $entry.UninstallString -notmatch '^"([^"]+)"') { throw 'Fluxy per-user uninstall registration is missing' }
+    $executable = Join-Path (Split-Path $Matches[1] -Parent) 'Fluxy.exe'
     if (!(Test-Path -LiteralPath $executable)) { throw 'Installed Fluxy executable is missing' }
     Write-Output "Verified $shell installation: $executable, version $((Get-Item -LiteralPath $executable).VersionInfo.ProductVersion)"
 }

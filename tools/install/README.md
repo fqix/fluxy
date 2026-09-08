@@ -30,6 +30,14 @@ irm https://raw.githubusercontent.com/fqix/fluxy/main/install.ps1 | iex
 
 The script downloads the NSIS installer, validates SHA-256, and runs its silent installation mode. The installer installs per user. It reports failures and any restart requirement without initiating a restart itself.
 
+The script writes each installation stage and any error to `%TEMP%\fluxy-install.log`. If the terminal closes unexpectedly, open this file after reopening PowerShell:
+
+```powershell
+Get-Content "$env:TEMP\fluxy-install.log"
+```
+
+Use `-LogPath` to choose another log file. The log contains installer diagnostics, not a transcript of your terminal session.
+
 From a local checkout:
 
 ```powershell

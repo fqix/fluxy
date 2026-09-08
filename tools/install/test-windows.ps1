@@ -31,7 +31,12 @@ if ($global:FluxyTestCalls -ne 1) { throw 'Valid fixture was not installed' }
 # Exercise the documented irm ... | iex execution shape with local script text.
 $env:PROCESSOR_ARCHITECTURE = 'AMD64'
 $env:PROCESSOR_ARCHITEW6432 = ''
+$ErrorActionPreference = 'Continue'
+$ProgressPreference = 'Continue'
 [IO.File]::ReadAllText($installerScript) | Invoke-Expression
+$preferencesPreserved = $ErrorActionPreference -eq 'Continue' -and $ProgressPreference -eq 'Continue'
+$ErrorActionPreference = 'Stop'
+if (!$preferencesPreserved) { throw 'Installer changed the interactive shell preferences' }
 if ($global:FluxyTestCalls -ne 2) { throw 'iex did not execute the verified installer' }
 $global:FluxyTestCorrupt = $true
 $rejected = $false
@@ -41,3 +46,16 @@ $rejected = $false
 try { & $installerScript -Version '1.0.0/../../evil' } catch { $rejected = $true }
 if (!$rejected) { throw 'Invalid release version was accepted' }
 Write-Output 'Windows installer fixtures passed.'
+
+$logPath = Join-Path ([IO.Path]::GetTempPath()) ('fluxy-log-test-' + [Guid]::NewGuid().ToString('N') + '.log')
+try {
+    $rejected = $false
+    try { & $installerScript -Version 0.1.0 -Arch x64 -LogPath $logPath } catch {
+        $rejected = $_.Exception.Message -match 'verifying installer' -and $_.Exception.Message.Contains($logPath)
+    }
+    if (!$rejected) { throw 'Installer failure did not identify its stage and log' }
+    $log = [IO.File]::ReadAllText($logPath)
+    if ($log -notmatch 'downloading installer' -or $log -notmatch 'Checksum mismatch') {
+        throw 'Installer failure log is incomplete'
+    }
+} finally { Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue }

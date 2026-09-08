@@ -9,6 +9,13 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - name: Test installer fixtures in both shells
+        shell: pwsh
+        run: |
+          powershell -NoProfile -File tools/install/test-windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Windows PowerShell fixtures failed' }
+          pwsh -NoProfile -File tools/install/test-windows.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'PowerShell 7 fixtures failed' }
       - name: Test published installer in Windows PowerShell and PowerShell 7
         shell: pwsh
         run: ./tools/install/smoke-windows.ps1
