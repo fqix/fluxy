@@ -1,7 +1,7 @@
 {
   "name": "fluxy",
   "desktopName": "fluxy.desktop",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Fluxy network inspector — Electron and TypeScript desktop",
   "private": true,
   "license": "MIT",
