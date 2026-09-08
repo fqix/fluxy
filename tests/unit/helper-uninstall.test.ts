@@ -4,7 +4,12 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { HelperService, helperID, uninstallationScript } from '../../src/main/system/helper'
+import {
+    HelperService,
+    HelperRPC,
+    helperID,
+    uninstallationScript
+} from '../../src/main/system/helper'
 
 describe.skipIf(process.platform !== 'darwin')('helper removal without system mutations', () => {
     let directory: string
@@ -149,4 +154,26 @@ describe.skipIf(process.platform !== 'darwin')('helper removal without system mu
         expect(script).not.toContain('/usr/bin/security')
         expect(script).not.toContain('dev.fengqi.fluxy.helper')
     })
+})
+
+// Revocation remains available after upgrading Fluxy, even if new assets are absent.
+it('removes a CA through the paired helper without checking the current bundle version', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'fluxy-revoke-old-helper-'))
+    const request = vi
+        .spyOn(HelperRPC.prototype, 'request')
+        .mockResolvedValue({ buildID: 'old', tunRunning: false })
+    const helper = new HelperService(directory, '/missing/helper', '/missing/core', () => {})
+    try {
+        await writeFile(
+            join(directory, 'helper-client.json'),
+            JSON.stringify({ token: 'a'.repeat(64) })
+        )
+        const der = Buffer.from('test certificate bytes')
+        await helper.removeCertificate(der)
+        expect(request).toHaveBeenCalledWith('ca.remove', der.toString('base64'), 90000)
+    } finally {
+        await helper.close()
+        request.mockRestore()
+        await rm(directory, { recursive: true, force: true })
+    }
 })

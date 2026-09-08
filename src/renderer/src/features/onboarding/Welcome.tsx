@@ -55,7 +55,7 @@ export function Welcome({
         ref.current?.focus()
         return () => previous?.focus()
     }, [])
-    const setupReady = helperReady && !!certificate?.trusted
+    const setupReady = helperReady && !!certificate?.trusted && !certificate?.browserError
     const completed =
         Number(setupReady) + Number(isTun ? snapshot.tun.state === 'running' : snapshot.running)
     const dismiss = () => {
@@ -89,10 +89,10 @@ export function Welcome({
     const rows = [
         {
             title: 'Helper & Certificate Setup',
-            detail: 'Complete Helper installation and certificate trust through macOS native authorization. First-time setup may request authorization twice. Completed steps are reused when you retry.',
+            detail: 'Install Helper and trust the Fluxy root certificate using system authorization. On Linux, Fluxy also configures existing Chrome and Firefox profiles. Completed steps are reused when you retry.',
             icon: Wrench,
             done: setupReady,
-            error: certificate?.error,
+            error: certificate?.error || certificate?.browserError,
             label: certificate?.error
                 ? 'Recheck Status'
                 : helperReady

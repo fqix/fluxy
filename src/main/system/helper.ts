@@ -512,11 +512,16 @@ export class HelperService {
             throw error
         }
     }
-    private async operation(method: string, params: unknown, timeout: number) {
+    private async operation(
+        method: string,
+        params: unknown,
+        timeout: number,
+        requireCurrent = true
+    ) {
         if (this.uninstalling) throw new Error('Helper Tool is being uninstalled')
         this.operations++
         try {
-            await this.ensureInstalled()
+            if (requireCurrent) await this.ensureInstalled()
             const reply = await (await this.client()).request(method, params, timeout)
             if (method === 'tun.start') {
                 if (!reply.tunRunning)
@@ -531,8 +536,11 @@ export class HelperService {
         }
     }
     async removeCertificate(der: Buffer) {
+        if (this.installing) throw new Error('Wait for Helper Tool installation to finish')
         if (this.trusting) throw new Error('Wait for certificate trust to finish')
-        await this.operation('ca.remove', der.toString('base64'), 90000)
+        // Revocation must also work with a paired older helper during an app upgrade.
+        // It does not execute new code or require the current bundled assets.
+        await this.operation('ca.remove', der.toString('base64'), 90000, false)
     }
     installCertificate(der: Buffer): Promise<void> {
         if (this.trusting) return this.trusting

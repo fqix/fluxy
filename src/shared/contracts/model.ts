@@ -349,6 +349,7 @@ export type AppEvent =
     | { type: 'log'; log: LogEntry }
     | { type: 'command'; command: MenuCommand }
 export interface CertificateStatus {
+    browserError?: string
     generated: boolean
     trusted: boolean
     supported: boolean

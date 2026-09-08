@@ -31,6 +31,7 @@ import { MCPService } from '../integrations/mcp'
 import { SystemProxy } from '../system/system-proxy'
 import { CaptureController } from '../capture/capture'
 import { ensureCertificate, certificateStatus } from '../certificates/certificates'
+import { CertificateTrust } from '../certificates/certificate-trust'
 import {
     highlightSchema,
     breakpointEditSchema,
@@ -78,6 +79,7 @@ let store: Store
 let engine: ProxyEngine
 let tun: TunService
 let helper: HelperService
+let certificateTrust: CertificateTrust
 let systemProxy: SystemProxy
 let capture: CaptureController
 let mcp: MCPService
@@ -121,6 +123,19 @@ function registerIPC() {
                 event.senderFrame !== window.webContents.mainFrame
             )
                 throw new Error('Untrusted IPC sender')
+            if (
+                [
+                    'helper:install',
+                    'helper:uninstall',
+                    'helper:reset',
+                    'certificate:trust',
+                    'certificate:reset'
+                ].includes(channel)
+            )
+                return certificateTrust.exclusive(async () => {
+                    if (quitting) throw new Error('Fluxy is shutting down')
+                    return fn(...args)
+                })
             return fn(...args)
         })
     }
@@ -133,6 +148,7 @@ function registerIPC() {
             try {
                 await updater.install(async () => {
                     quitting = true
+                    await certificateTrust?.settled()
                     await capture?.settled()
                     const errors = await stopServices({
                         tun,
@@ -490,20 +506,13 @@ exec /bin/zsh -i
         const answer = await dialog.showMessageBox(window!, {
             type: 'warning',
             message: 'Reset Fluxy Certificates?',
-            detail: 'This removes this Electron installation’s root CA, its System trust, and cached host certificates, and all imported identities. Custom CA trust installed separately is preserved. Clients must trust the newly generated CA afterward.',
+            detail: 'This removes this Electron installation’s root CA, its system and browser trust, and cached host certificates, and all imported identities. Custom CA trust installed separately is preserved. Clients must trust the newly generated CA afterward.',
             buttons: ['Cancel', 'Reset'],
             defaultId: 0,
             cancelId: 0
         })
         if (answer.response !== 1) return false
-        const status = await certificateStatus(join(store.directory, 'certificates'))
-        if (status.error) throw new Error(status.error)
-        if (status.generated && supportedHelperPlatform())
-            await helper.removeCertificate(
-                new X509Certificate(
-                    await readFile(join(store.directory, 'certificates/certs/ca.pem'))
-                ).raw
-            )
+        await certificateTrust.remove()
         customCertificates.clear()
         await rm(join(store.directory, 'custom-root.pem'), { force: true })
         await rm(join(store.directory, 'certificates'), { recursive: true, force: true })
@@ -549,19 +558,21 @@ exec /bin/zsh -i
                 after.error ||
                     'Helper installed, but certificate trust verification failed. Retry Helper & Certificate Setup.'
             )
+        await certificateTrust.sync(true)
     })
     handle('helper:uninstall', async () => {
         if (!supportedHelperPlatform()) throw new Error('Unsupported helper platform')
         const answer = await dialog.showMessageBox(window!, {
             type: 'warning',
             message: 'Uninstall Fluxy Helper?',
-            detail: 'Capture will stop. This removes the Electron helper service, its installed programs and pairing information. Certificates, saved traffic and preferences are kept. Your operating system will request administrator authorization. TUN requires installing the helper again.',
+            detail: 'Capture will stop. This removes the Electron helper service, its installed programs and pairing information. The Fluxy root CA will be removed from system and browser trust stores. Saved traffic, preferences and custom CA trust are kept. Your operating system will request administrator authorization. TUN requires installing the helper again.',
             buttons: ['Cancel', 'Uninstall'],
             defaultId: 0,
             cancelId: 0
         })
         if (answer.response !== 1) return false
         await capture.stop()
+        await certificateTrust.remove()
         await helper.uninstall()
         emit({ type: 'state' })
         return true
@@ -828,12 +839,15 @@ exec /bin/zsh -i
             engine.replace(items)
         }
     })
-    handle('certificate:status', () =>
-        certificateStatus(
+    handle('certificate:status', async () => ({
+        ...(await certificateStatus(
             join(store.directory, 'certificates'),
             customCertificates.publicRootPath()
-        )
-    )
+        )),
+        ...(!customCertificates.rootIdentity() && certificateTrust.browserError
+            ? { browserError: certificateTrust.browserError }
+            : {})
+    }))
     handle('certificate:generate', async () => {
         await ensureCertificate(join(store.directory, 'certificates'))
         return certificateStatus(
@@ -863,8 +877,7 @@ exec /bin/zsh -i
         await ensureCertificate(join(store.directory, 'certificates'))
         const der = new X509Certificate(await readFile(engine.certificatePath)).raw
         const existing = await certificateStatus(join(store.directory, 'certificates'))
-        if (existing.trusted) return true
-        await helper.installCertificate(der)
+        if (!existing.trusted) await helper.installCertificate(der)
         const status = await certificateStatus(
             join(store.directory, 'certificates'),
             customCertificates.publicRootPath()
@@ -873,6 +886,7 @@ exec /bin/zsh -i
             throw new Error(
                 status.error || 'CA installation finished, but system trust verification failed'
             )
+        await certificateTrust.sync(true)
         engine.log(
             'Root CA installed and trusted through Helper Tool. Restart clients before capturing HTTPS.'
         )
@@ -969,6 +983,13 @@ else {
                 () => emit({ type: 'state' })
             )
             await helper.refresh()
+            certificateTrust = new CertificateTrust(store.directory, (der) =>
+                helper.removeCertificate(der)
+            )
+            if (process.platform === 'linux' && !customCertificates.rootIdentity())
+                await certificateTrust
+                    .exclusive(() => certificateTrust.sync())
+                    .catch((error) => engine.log(`Browser CA setup: ${String(error)}`, 'warn'))
             if (quitting) return
             tun = new TunService(store, engine, corePath, () => emit({ type: 'state' }), helper)
             await tun.checkCore()
@@ -1073,6 +1094,7 @@ else {
             // services that exist. Startup guards prevent later services/windows
             // from being created after this quit request.
             await startup
+            await certificateTrust?.settled()
             await capture?.settled()
             const errors = await stopServices({ tun, helper, systemProxy, engine, mcp, scripts })
             if (errors.length) dialog.showErrorBox('Fluxy cleanup failed', errors.join('\n'))
