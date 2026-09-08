@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import https from 'node:https'
 import { enableMixedProxy } from './mixed-proxy'
+import { onFragmentedMessage, sendFragmentedMessage } from './websocket-fragments'
 import { observeTimings } from '../../src/main/capture/timing'
 import { StreamChannel } from '../../src/main/capture/whistle-ipc'
 
@@ -240,7 +241,7 @@ function sockets(proxy: any) {
                     wsServer.handleUpgrade(req, socket, head || Buffer.alloc(0), (client: any) => {
                         const transfer = (from: any, to: any, fromServer: boolean) => {
                             let queue = Promise.resolve()
-                            from.on('message', (data: Buffer, binary: boolean) => {
+                            onFragmentedMessage(from, (data, binary, lengths) => {
                                 from.pause()
                                 queue = queue
                                     .then(async () => {
@@ -253,13 +254,11 @@ function sockets(proxy: any) {
                                             binary
                                         })
                                         if (result.error) throw new Error(result.error)
-                                        await new Promise<void>((resolve, reject) =>
-                                            to.send(
-                                                result.data,
-                                                { binary: result.binary },
-                                                (error: Error) =>
-                                                    error ? reject(error) : resolve()
-                                            )
+                                        await sendFragmentedMessage(
+                                            to,
+                                            result.data,
+                                            result.binary,
+                                            lengths
                                         )
                                         from.resume()
                                     })
