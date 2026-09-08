@@ -1,8 +1,25 @@
 import { execFile } from 'node:child_process'
+import { randomInt } from 'node:crypto'
 import { promisify } from 'node:util'
 const execute = promisify(execFile)
 export function tunInterfaceName(number: number, platform = process.platform) {
+    // XNU ifnet_allocate_extended rejects unit > SHRT_MAX (32767), even
+    // though the utun control socket itself uses a 32-bit unit number.
+    if (!Number.isInteger(number) || number < 0 || (platform === 'darwin' && number > 32767))
+        throw new Error('Invalid TUN interface number')
     return `${platform === 'darwin' ? 'utun' : 'fluxy'}${number}`
+}
+export function unusedTunInterfaceName(occupied: Iterable<string>, platform = process.platform) {
+    const minimum = 2000
+    const maximum = platform === 'darwin' ? 32768 : 60000 // exclusive
+    const start = randomInt(minimum, maximum)
+    const names = new Set(occupied)
+    for (let offset = 0; offset < maximum - minimum; offset++) {
+        const number = minimum + ((start - minimum + offset) % (maximum - minimum))
+        const name = tunInterfaceName(number, platform)
+        if (!names.has(name)) return name
+    }
+    throw new Error('No unused TUN interface name is available')
 }
 export async function routeInterface(
     destination: string,

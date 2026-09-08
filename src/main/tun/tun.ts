@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, readFile, writeFile, rm, access } from 'node:fs/promise
 import { constants } from 'node:fs'
 import { join } from 'node:path'
 import { networkInterfaces } from 'node:os'
-import { createHash, randomBytes, randomInt } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import net from 'node:net'
 import { once } from 'node:events'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -15,7 +15,7 @@ import { matchPattern, type TunStatus } from '../../shared/contracts/model'
 import type { Store } from '../storage/store'
 import type { ProxyEngine } from '../capture/proxy'
 
-import { routeInterface, tunInterfaceName } from './tun-platform'
+import { routeInterface, unusedTunInterfaceName } from './tun-platform'
 import { waitForSplitDNSRemoval, type SplitDNS } from './split-dns'
 import { supportedHelperPlatform } from '../system/helper-platform'
 
@@ -146,10 +146,7 @@ export class TunService {
                     this.store.settings.sslHosts.some((pattern) => matchPattern(pattern, host))
             )
             await this.bridge.start()
-            let interfaceName: string
-            do {
-                interfaceName = tunInterfaceName(randomInt(2000, 60000))
-            } while (networkInterfaces()[interfaceName])
+            const interfaceName = unusedTunInterfaceName(Object.keys(networkInterfaces()))
             this.ownedInterface = interfaceName
             this.setStatus({ interfaceName })
             const config = join(this.directory, 'config.json')
