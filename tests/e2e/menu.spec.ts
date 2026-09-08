@@ -390,9 +390,22 @@ test('project menus persist tabs and filters across switching and restart', asyn
             'NODE_EXTRA_CA_CERTS'
         )
         await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
-        await click(app, 'setup:Java')
-        await expect(page.getByRole('dialog')).toContainText('keytool -importcert')
-        await page.getByRole('button', { name: 'Close dialog', exact: true }).click()
+        expect(
+            await app.evaluate(({ Menu }) =>
+                [
+                    'setup:iOS Simulator',
+                    'setup:iPhone or iPad',
+                    'setup:Android Emulator',
+                    'setup:Android Device',
+                    'setup:Java',
+                    'setup:Flutter',
+                    'setup:React Native',
+                    'setup:Electron',
+                    'setup:Next.js',
+                    'setup:Firefox'
+                ].filter((id) => Menu.getApplicationMenu()!.getMenuItemById(id))
+            )
+        ).toEqual([])
         await app.close()
         app = await launch()
         page = await app.firstWindow()

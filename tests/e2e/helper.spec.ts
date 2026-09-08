@@ -48,9 +48,47 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                 const net = process.getBuiltinModule('node:net')!
                 const originalConnect = net.createConnection
                 net.createConnection = ((...args: unknown[]) => {
-                    if (args[0] === '/private/var/run/dev.fengqi.fluxy.electron.helper.sock')
-                        args[0] = paths.root + '/helper.sock'
-                    return Reflect.apply(originalConnect, net, args)
+                    if (args[0] !== '/private/var/run/dev.fengqi.fluxy.electron.helper.sock')
+                        return Reflect.apply(originalConnect, net, args)
+                    args[0] = paths.root + '/helper.sock'
+                    const socket = Reflect.apply(originalConnect, net, args)
+                    const originalWrite = socket.write
+                    socket.write = ((chunk: string | Buffer, ...rest: unknown[]) => {
+                        const request = JSON.parse(chunk.toString())
+                        if (request.method === 'ca.remove' && state.simulateCARemoval) {
+                            // The real rootless helper must keep rejecting system CA mutations.
+                            // Simulate only this boundary, validating the exact installation CA.
+                            const { X509Certificate } = process.getBuiltinModule('node:crypto')!
+                            const expected = new X509Certificate(
+                                fs.readFileSync(paths.data + '/certificates/certs/ca.pem')
+                            ).raw
+                            const matches = expected.equals(Buffer.from(request.params, 'base64'))
+                            state.caRemovalCount++
+                            queueMicrotask(() =>
+                                socket.emit(
+                                    'data',
+                                    Buffer.from(
+                                        JSON.stringify({
+                                            id: request.id,
+                                            ...(matches
+                                                ? {
+                                                      result: {
+                                                          buildID: 'fixture-ca-removal',
+                                                          tunRunning: false
+                                                      }
+                                                  }
+                                                : {
+                                                      error: 'CA removal requested the wrong identity'
+                                                  })
+                                        }) + '\n'
+                                    )
+                                )
+                            )
+                            return true
+                        }
+                        return Reflect.apply(originalWrite, socket, [chunk, ...rest])
+                    }) as typeof socket.write
+                    return socket
                 }) as typeof net.createConnection
                 const cp = process.getBuiltinModule('node:child_process')!
                 const fs = process.getBuiltinModule('node:fs')!
@@ -60,10 +98,14 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                     testHelperPID?: number
                     uninstallConfirmed: boolean
                     uninstallAuthCanceled: boolean
+                    simulateCARemoval: boolean
+                    caRemovalCount: number
                 }
                 state.helperAuthCount = 0
                 state.uninstallConfirmed = false
                 state.uninstallAuthCanceled = false
+                state.simulateCARemoval = false
+                state.caRemovalCount = 0
                 const originalDialog = _electron.dialog.showMessageBox
                 _electron.dialog.showMessageBox = (async (...args: unknown[]) => {
                     const options = args.at(-1) as { message?: string }
@@ -209,9 +251,18 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
             ;(process as any).uninstallAuthCanceled = true
         })
         await uninstall.click()
+        await expect(page.getByRole('alert').first()).toContainText('CA mutations are disabled')
+        expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(0)
+        await access(join(data, 'helper-client.json'))
+        expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
+        await app.evaluate(() => {
+            ;(process as any).simulateCARemoval = true
+        })
+        await uninstall.click()
         await expect(page.getByRole('alert').first()).toContainText(
             'Uninstall authorization canceled'
         )
+        expect(await app.evaluate(() => (process as any).caRemovalCount)).toBe(1)
         expect((await page.evaluate(() => window.fluxy.snapshot())).running).toBe(false)
         await access(join(data, 'helper-client.json'))
         expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
@@ -227,6 +278,8 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         expect(await readFile(join(data, 'certificates/certs/ca.pem'), 'utf8')).toBe(ca)
         await expect(uninstall).toBeDisabled()
         expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(2)
+        expect(await app.evaluate(() => (process as any).caRemovalCount)).toBe(2)
+        await access(join(data, 'browser-ca-disabled'))
         await page.getByRole('button', { name: 'Set Up Helper & CA', exact: true }).click()
         await expect
             .poll(async () => (await page.evaluate(() => window.fluxy.snapshot())).helper.state, {
