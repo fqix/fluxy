@@ -471,6 +471,15 @@ func command() error {
 			}
 		}
 		return authorizeDesktop(request.Command, cert)
+	case "trust-ca-privileged":
+		cert, err := certificate(data)
+		if err != nil {
+			return err
+		}
+		if time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter) {
+			return errors.New("certificate expired or not yet valid")
+		}
+		return privilegedTrustCertificate(cert)
 	case "validate-tun":
 		var p tunParams
 		if err = decode(data, &p); err != nil {

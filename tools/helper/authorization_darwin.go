@@ -28,8 +28,8 @@ import "C"
 import (
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -51,10 +51,7 @@ func authorizeDesktop(command string, cert *x509.Certificate) error {
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	if cert != nil {
-		public := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}))
-		command += "\nfluxy_result=$?\n[ \"$fluxy_result\" -eq 0 ] || exit \"$fluxy_result\"\numask 077\nfluxy_ca=$(/usr/bin/mktemp /private/tmp/fluxy-public-ca.XXXXXX) || exit 1\ntrap '/bin/rm -f \"$fluxy_ca\"' EXIT\n/bin/cat >\"$fluxy_ca\" <<'FLUXY_PUBLIC_CA'\n" + public + "FLUXY_PUBLIC_CA\n/usr/bin/security add-certificates -k /Library/Keychains/System.keychain \"$fluxy_ca\""
-	}
+	command = nativeSetupCommand(command, cert)
 	var nonce [32]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return err
@@ -91,9 +88,6 @@ func authorizeDesktop(command string, cert *x509.Certificate) error {
 	if err := nativeInstallerResult(output, marker); err != nil {
 		return err
 	}
-	if cert != nil {
-		return desktopTrustCertificate(cert)
-	}
 	return nil
 }
 
@@ -112,4 +106,16 @@ func nativeInstallerResult(output []byte, marker string) error {
 		return errors.New("native helper operation failed: " + result)
 	}
 	return nil
+}
+
+// The installed, checksum-verified helper completes certificate trust within the
+// same elevated installation process. No second desktop authorizer is launched.
+func nativeSetupCommand(command string, cert *x509.Certificate) string {
+	if cert == nil {
+		return command
+	}
+	encoded := base64.StdEncoding.EncodeToString(cert.Raw)
+	return command + "\nfluxy_result=$?\n[ \"$fluxy_result\" -eq 0 ] || exit \"$fluxy_result\"\n" +
+		"'/Library/PrivilegedHelperTools/" + serviceID + "/fluxy-helper' trust-ca-privileged <<'FLUXY_PUBLIC_CA'\n\"" +
+		encoded + "\"\nFLUXY_PUBLIC_CA\n"
 }

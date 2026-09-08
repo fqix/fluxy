@@ -13,3 +13,7 @@ func addPublicCertificate(*x509.Certificate) error {
 func desktopTrustCertificate(*x509.Certificate) error {
 	return errors.New("desktop CA trust is only supported on macOS")
 }
+
+func privilegedTrustCertificate(*x509.Certificate) error {
+	return errors.New("elevated native CA trust is only supported on macOS")
+}

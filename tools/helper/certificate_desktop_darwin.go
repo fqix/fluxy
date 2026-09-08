@@ -20,6 +20,28 @@ static OSStatus fluxy_add_public_ca(const void *bytes, long size) {
  CFRelease(data);
  return status;
 }
+static OSStatus fluxy_privileged_trust_ca(const void *bytes, long size) {
+ OSStatus status = fluxy_add_public_ca(bytes, size);
+ if (status) return status;
+ CFDataRef data = CFDataCreate(NULL, bytes, size);
+ SecCertificateRef cert = SecCertificateCreateWithData(NULL, data);
+ CFRelease(data);
+ if (!cert) return errSecDecode;
+ CFArrayRef settings = NULL;
+ status = SecTrustSettingsCopyTrustSettings(cert, kSecTrustSettingsDomainAdmin, &settings);
+ Boolean trusted = !status && settings && CFArrayGetCount(settings) == 0;
+ if (settings) CFRelease(settings);
+ if (status && status != errSecItemNotFound) { CFRelease(cert); return status; }
+ if (!trusted) status = SecTrustSettingsSetTrustSettings(cert, kSecTrustSettingsDomainAdmin, NULL);
+ if (!status) {
+  settings = NULL;
+  status = SecTrustSettingsCopyTrustSettings(cert, kSecTrustSettingsDomainAdmin, &settings);
+  if (!status && (!settings || CFArrayGetCount(settings) != 0)) status = errSecNotTrusted;
+  if (settings) CFRelease(settings);
+ }
+ CFRelease(cert);
+ return status;
+}
 static OSStatus fluxy_desktop_trust_ca(const void *bytes, long size) {
  SecuritySessionId session;
  SessionAttributeBits attributes;
@@ -81,4 +103,22 @@ func desktopTrustCertificate(cert *x509.Certificate) error {
 	default:
 		return fmt.Errorf("macOS certificate trust authorization failed: OSStatus %d", status)
 	}
+}
+
+// Only called by the elevated installer CLI, never by the daemon RPC dispatcher.
+func privilegedTrustCertificate(cert *x509.Certificate) error {
+	if helperTesting {
+		return errors.New("CA mutations are disabled in the rootless test helper")
+	}
+	if os.Geteuid() != 0 {
+		return errors.New("certificate installation requires the elevated installer")
+	}
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	data := C.CBytes(cert.Raw)
+	defer C.free(data)
+	if status := C.fluxy_privileged_trust_ca(data, C.long(len(cert.Raw))); status != 0 {
+		return fmt.Errorf("elevated certificate trust failed: OSStatus %d; Helper remains installed", status)
+	}
+	return nil
 }
