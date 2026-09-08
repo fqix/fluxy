@@ -369,6 +369,70 @@ describe('real proxy traffic', () => {
         await response
         expect(hits).toHaveLength(0)
     })
+    it('finishes capture when the client receives the body before the upstream IPC end', async () => {
+        // Hold upstream credit so the body reaches the client before its IPC end event.
+        const transport = (
+            engine as unknown as {
+                proxy: { send: (message: Record<string, unknown>) => void }
+            }
+        ).proxy
+        const send = transport.send.bind(transport)
+        const credits: Record<string, unknown>[] = []
+        transport.send = (message) => {
+            if (message.type === 'credit' && String(message.stream).endsWith(':response:in'))
+                credits.push(message)
+            else send(message)
+        }
+        try {
+            const result = await promisify(execFile)('curl', [
+                '--silent',
+                '--show-error',
+                '--max-time',
+                '8',
+                '--noproxy',
+                '',
+                '--proxy',
+                `http://127.0.0.1:${port}`,
+                `http://127.0.0.1:${originPort}/hello`
+            ])
+            expect(result.stdout).toContain('/hello')
+            expect(credits.length).toBeGreaterThan(0)
+            // Let the child's downstream close event race ahead of the upstream end.
+            await new Promise((resolve) => setTimeout(resolve, 100))
+            transport.send = send
+            for (const credit of credits.splice(0)) send(credit)
+            await waitFor(() => [...engine.transactions.values()][0]?.state === 'completed')
+            expect([...engine.transactions.values()][0].responseBody).toContain('/hello')
+        } finally {
+            transport.send = send
+            for (const credit of credits.splice(0)) send(credit)
+        }
+    })
+    it('marks a response interrupted before Content-Length as an error', async () => {
+        origin.removeAllListeners('request')
+        origin.on('request', (_req, res) => {
+            res.writeHead(200, { 'content-length': 100 })
+            res.write('partial')
+        })
+        await new Promise<void>((resolve, reject) => {
+            const client = http.get(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    path: `http://127.0.0.1:${originPort}/interrupted`
+                },
+                (res) => {
+                    res.once('data', () => {
+                        res.destroy()
+                        resolve()
+                    })
+                    res.on('error', reject)
+                }
+            )
+            client.on('error', reject)
+        })
+        await waitFor(() => [...engine.transactions.values()][0]?.state === 'error')
+    })
     it('pauses then continues a request at a breakpoint', async () => {
         store.rules = [rule('breakpoint')]
         const pending = request()
@@ -377,7 +441,7 @@ describe('real proxy traffic', () => {
         const t = [...engine.transactions.values()][0]
         engine.resolveBreakpoint(t.id, 'continue')
         expect((await pending).status).toBe(200)
-        expect(t.state).toBe('completed')
+        await waitFor(() => t.state === 'completed')
     })
     it('aborts paused traffic and keeps upstream untouched', async () => {
         store.rules = [rule('breakpoint')]

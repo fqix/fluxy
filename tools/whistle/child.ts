@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import https from 'node:https'
+import type { Readable } from 'node:stream'
 import { enableMixedProxy } from './mixed-proxy'
 import { onFragmentedMessage, sendFragmentedMessage } from './websocket-fragments'
 import { observeTimings } from '../../src/main/capture/timing'
@@ -74,6 +75,10 @@ function middleware(req: any, res: any, next: () => void) {
     const output = channel.reader(`${id}:request:out`)
     let finished = false
     let upstreamResponse: any
+    let responseBody: Readable | undefined
+    let responseBytes = 0
+    let responseLength: number | undefined
+    let bodyDelivered = false
     const close = () => {
         if (finished) return
         finished = true
@@ -82,14 +87,29 @@ function middleware(req: any, res: any, next: () => void) {
         upstreamResponse?.destroy()
         req._clientReq?.destroy()
         channel.cancel(`${id}:`)
-        send({ type: 'closed', id, aborted: !res.writableFinished })
+        send({ type: 'closed', id, aborted: !res.writableFinished && !bodyDelivered })
     }
     active.set(id, () => {
         req.destroy()
         res.destroy()
         close()
     })
-    res.once('close', close)
+    res.once('close', () => {
+        // A client may close as soon as Content-Length bytes arrive, before the
+        // final IPC credit/end round trip. Drain that completed response so the
+        // parent can finish capture before close() cancels its streams.
+        bodyDelivered = responseLength !== undefined && responseBytes === responseLength
+        if (
+            bodyDelivered &&
+            responseBody &&
+            !responseBody.readableEnded &&
+            !responseBody.destroyed
+        ) {
+            responseBody.once('end', close)
+            responseBody.once('close', close)
+            responseBody.resume()
+        } else close()
+    })
     req.once('error', (error: Error) => fail(id, error))
     const requestResult = ask('request', id, { request: identity(req), socket: metadata(req) })
     void channel.pipe(`${id}:request:in`, req).catch((error) => fail(id, error))
@@ -122,7 +142,7 @@ function middleware(req: any, res: any, next: () => void) {
             res.response = async (upstream: any) => {
                 upstreamResponse = upstream
                 await Promise.resolve()
-                const body = channel.reader(`${id}:response:out`)
+                const body = (responseBody = channel.reader(`${id}:response:out`))
                 const responseResult = ask('response', id, {
                     response: identity(upstream),
                     timings: req._fluxyTiming?.timings
@@ -139,6 +159,16 @@ function middleware(req: any, res: any, next: () => void) {
                             body.pipe(res)
                             return
                         }
+                        const length = result.headers['content-length']
+                        if (req.method === 'HEAD' || result.status === 204 || result.status === 304)
+                            responseLength = 0
+                        else if (length !== undefined && /^\d+$/.test(String(length)))
+                            responseLength = Number(length)
+                        body.on('data', (chunk: Buffer) => {
+                            responseBytes += chunk.length
+                        })
+                        // Whistle resumes the body when its response pipeline is ready.
+                        body.pause()
                         const response = Object.assign(body, {
                             statusCode: result.status,
                             statusMessage: result.statusMessage,
