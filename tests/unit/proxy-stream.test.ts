@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 import { setTimeout as delay } from 'node:timers/promises'
 import { expect, it } from 'vitest'
-import { StreamChannel } from '../../src/main/capture/whistle-ipc'
+import { StreamChannel } from '../../src/main/capture/proxy-stream'
 
 it('backpressures an unread body and resumes without losing bytes', async () => {
     let chunks = 0

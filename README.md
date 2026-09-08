@@ -51,7 +51,7 @@ Use Node.js 22.12+ and npm. All builds need Python 3.10+ and Go for the transpor
 - Certificate tools, request composition, scripting, Protobuf/gRPC inspection and MCP.
 - Automatic update checks/downloads with an explicit restart/install action. Production updates require signed published packages.
 
-Whistle runs in an isolated child process; Fluxy retains its rules, scripts, breakpoints and session model. The pinned source, patches and stream regression coverage are documented in [tools/whistle](tools/whistle/README.md).
+goproxy runs in a Go child process; Fluxy retains its rules, scripts, breakpoints and session model. Pinned dependencies, builds and stream regression coverage are documented in [tools/goproxy](tools/goproxy/README.md).
 
 The AI assistant has been removed. See [feature coverage and limits](ELECTRON.md).
 
@@ -87,7 +87,7 @@ Tests use local servers and temporary storage. Real system proxy changes, certif
 | `src/shared`                             | [Shared modules](src/shared/README.md): contracts, traffic, workspace     |
 | `tools/helper`                           | Cross-platform Go privilege helper                                        |
 | `tools/sing-box`, `third_party/sing-box` | Pinned transport core and build tooling                                   |
-| `tools/whistle`, `third_party/whistle`   | Pinned Whistle proxy, isolated runtime and patches                        |
+| `tools/goproxy`   | Go HTTP proxy, private IPC and build tooling                        |
 | `tests`                                  | Unit, integration and Electron desktop tests                              |
 | `resources`                              | Fluxy icons and redistribution notices                                    |
 

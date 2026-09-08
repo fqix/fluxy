@@ -16,15 +16,15 @@
     "test:e2e": "npm run build && playwright test",
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "format": "prettier --write src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json tools/whistle",
-    "format:check": "prettier --check src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json tools/whistle",
+    "format": "prettier --write src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json tools/goproxy/*.mjs",
+    "format:check": "prettier --check src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json tools/goproxy/*.mjs",
     "test:packaged": "FLUXY_TEST_EXECUTABLE=\"$PWD/dist/mac-arm64/Fluxy.app/Contents/MacOS/Fluxy\" playwright test",
-    "core:build": "node build-electron-core.mjs && node build-electron-helper.mjs && npm run whistle:build",
+    "core:build": "node build-electron-core.mjs && node build-electron-helper.mjs && npm run proxy:build",
     "predev": "npm run core:build",
     "pretest": "npm run core:build",
-    "whistle:build": "node tools/whistle/build.mjs",
-    "test:protocol": "npm run whistle:build && tsx tests/protocol/verify.ts",
-    "test:protocol:public": "npm run whistle:build && tsx tests/protocol/public.ts"
+    "test:protocol": "npm run proxy:build && tsx tests/protocol/verify.ts",
+    "test:protocol:public": "npm run proxy:build && tsx tests/protocol/public.ts",
+    "proxy:build": "node tools/goproxy/build.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -188,22 +188,12 @@
           ]
         },
         {
-          "from": "build/whistle",
-          "to": "whistle",
+          "from": "build/goproxy",
+          "to": "proxy",
           "filter": [
-            "**/*",
-            "!upstream/.git",
-            "!upstream/test/**/*",
-            "!upstream/docs/**/*",
-            "!upstream/.github/**/*",
-            "!upstream/biz/webui/htdocs/src/**/*"
-          ]
-        },
-        {
-          "from": "build/whistle/node_modules",
-          "to": "whistle/node_modules",
-          "filter": [
-            "**/*"
+            "fluxy-proxy",
+            "manifest.json",
+            "licenses.txt"
           ]
         }
       ],
@@ -237,22 +227,12 @@
           ]
         },
         {
-          "from": "build/whistle",
-          "to": "whistle",
+          "from": "build/goproxy",
+          "to": "proxy",
           "filter": [
-            "**/*",
-            "!upstream/.git",
-            "!upstream/test/**/*",
-            "!upstream/docs/**/*",
-            "!upstream/.github/**/*",
-            "!upstream/biz/webui/htdocs/src/**/*"
-          ]
-        },
-        {
-          "from": "build/whistle/node_modules",
-          "to": "whistle/node_modules",
-          "filter": [
-            "**/*"
+            "fluxy-proxy.exe",
+            "manifest.json",
+            "licenses.txt"
           ]
         }
       ]
@@ -284,22 +264,12 @@
           ]
         },
         {
-          "from": "build/whistle",
-          "to": "whistle",
+          "from": "build/goproxy",
+          "to": "proxy",
           "filter": [
-            "**/*",
-            "!upstream/.git",
-            "!upstream/test/**/*",
-            "!upstream/docs/**/*",
-            "!upstream/.github/**/*",
-            "!upstream/biz/webui/htdocs/src/**/*"
-          ]
-        },
-        {
-          "from": "build/whistle/node_modules",
-          "to": "whistle/node_modules",
-          "filter": [
-            "**/*"
+            "fluxy-proxy",
+            "manifest.json",
+            "licenses.txt"
           ]
         }
       ],

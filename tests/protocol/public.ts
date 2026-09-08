@@ -435,12 +435,12 @@ try {
 } finally {
     await mkdir(new URL('../../test-results/protocol/', import.meta.url), { recursive: true })
     await writeFile(
-        new URL('../../test-results/protocol/whistle-public.json', import.meta.url),
+        new URL('../../test-results/protocol/goproxy-public.json', import.meta.url),
         JSON.stringify(
             {
                 generatedAt: new Date().toISOString(),
-                engine: 'whistle',
-                version: '2.10.9',
+                engine: 'goproxy',
+                version: '1.9.1',
                 node: process.version,
                 platform: process.platform,
                 arch: process.arch,
@@ -454,7 +454,7 @@ try {
     )
     await proxy.stop()
     console.log(
-        `\n${results.filter((result) => result.outcome === 'passed').length}/${results.length} public checks passed. See test-results/protocol/whistle-public.json`
+        `\n${results.filter((result) => result.outcome === 'passed').length}/${results.length} public checks passed. See test-results/protocol/goproxy-public.json`
     )
     process.exitCode = results.some((result) => result.outcome !== 'passed') ? 1 : 0
 }

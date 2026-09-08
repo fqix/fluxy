@@ -519,8 +519,8 @@ try {
         node: process.version,
         platform: process.platform,
         arch: process.arch,
-        engine: 'whistle',
-        version: '2.10.9',
+        engine: 'goproxy',
+        version: '1.9.1',
         passed: results.filter((result) => result.passed).length,
         failed: results.filter((result) => !result.passed).length,
         results,
@@ -529,13 +529,13 @@ try {
     }
     await mkdir(new URL('../../test-results/protocol/', import.meta.url), { recursive: true })
     await writeFile(
-        new URL('../../test-results/protocol/whistle.json', import.meta.url),
+        new URL('../../test-results/protocol/goproxy.json', import.meta.url),
         JSON.stringify(report, null, 2) + '\n'
     )
     await proxy.stop()
     await fixture.stop()
     console.log(
-        `\n${report.passed}/${results.length} passed; ${report.failed} failed. Report: test-results/protocol/whistle.json`
+        `\n${report.passed}/${results.length} passed; ${report.failed} failed. Report: test-results/protocol/goproxy.json`
     )
     process.exitCode = report.failed ? 1 : 0
 }

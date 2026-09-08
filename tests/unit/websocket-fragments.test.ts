@@ -6,7 +6,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent'
 import WebSocket, { WebSocketServer } from 'ws'
 import { startProxy } from '../protocol/engine'
 import { origins } from '../protocol/fixtures'
-import { sendFragmentedMessage } from '../../tools/whistle/websocket-fragments'
+import { sendFragmentedMessage } from '../fixtures/websocket-fragments'
 
 type Frame = { fin: boolean; opcode: number; length: number; masked: boolean }
 

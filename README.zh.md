@@ -85,8 +85,8 @@ npm run dist
 
 Fluxy 原创贡献采用 [MIT 许可证](LICENSE)。第三方依赖和源自 Rockxy 的材料仍适用各自原许可证，不因本次修改而重新授权。详见[版权与适用范围](COPYRIGHT.md)和[第三方声明](THIRD_PARTY_NOTICES.md)。
 
-## Whistle 代理内核
+## goproxy 代理内核
 
-正式抓包使用独立子进程中的 Whistle，支持 HTTP/HTTPS、HTTP/2、gRPC/gRPCS、SSE、WS/WSS；规则、脚本和断点仍由 Fluxy 主进程执行。上游源码固定在 `third_party/whistle`，构建与补丁维护在 [tools/whistle](tools/whistle/README.md)。
+正式抓包使用基于 goproxy 的 Go 子进程，支持 HTTP/HTTPS、HTTP/2、gRPC/gRPCS、SSE、WS/WSS；规则、脚本和断点仍由 Fluxy 主进程执行。依赖版本、构建与协议回归说明见 [tools/goproxy](tools/goproxy/README.md)。应用内置代理二进制，无需单独安装 Go 或 Node.js。
 
 `npm run test:protocol` 运行本地协议回归，覆盖 SSE 实时事件及取消、双向 WebSocket 文本/二进制帧，以及 gRPC/gRPCS 的 Unary、客户端流、服务端流、双向流、错误状态、trailers 和取消传播。`npm run test:protocol:public` 使用 go-httpbin（httpbingo.org）和 grpcbin（grpcb.in），逐项对比直连与代理结果。响应详情提供 Trailers 页签。

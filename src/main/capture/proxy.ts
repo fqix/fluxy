@@ -9,7 +9,7 @@ import {
 import { matchesBreakpoint } from '../rules/rule-match'
 import { ProcessResolver } from './process-resolver'
 import type { CustomCertificates } from '../certificates/custom-certificates'
-import { Proxy, type IContext } from './whistle-transport'
+import { Proxy, type IContext } from './goproxy-transport'
 import http from 'node:http'
 import { isUtf8 } from 'node:buffer'
 import https from 'node:https'
@@ -429,7 +429,7 @@ export class ProxyEngine {
         })
         this.proxy = proxy
         proxy.onError((ctx, error, kind) => {
-            if (kind === 'WHISTLE_EXIT') void this.stop()
+            if (kind === 'GOPROXY_EXIT') void this.stop()
             const t = ctx && this.context.get(ctx)
             if (t) this.complete(t, error ?? new Error(kind))
             this.log(`${kind}: ${error?.message ?? 'Proxy error'}`, 'error')

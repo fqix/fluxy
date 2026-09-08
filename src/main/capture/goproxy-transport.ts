@@ -1,13 +1,14 @@
-import { fork, type ChildProcess } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
 import { Duplex, PassThrough, Readable, Transform } from 'node:stream'
-import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Transaction } from '../../shared/contracts/model'
-import { StreamChannel } from './whistle-ipc'
+import { StreamChannel } from './proxy-stream'
+import { ProxyWire } from './proxy-wire'
 
 type RequestTiming = NonNullable<Transaction['timings']>
 type Done = (error?: Error | null) => void
@@ -85,12 +86,13 @@ const call = (hook: Hook | undefined, context: IContext) =>
         hook(context, (error) => (error ? reject(error) : resolve()))
     })
 
-/** Whistle owns sockets and TLS in an isolated process; Fluxy owns policy and sessions. */
+/** goproxy owns sockets and TLS in a Go process; Fluxy owns policy and sessions. */
 export class Proxy {
     httpServer?: EventEmitter
     httpAgent!: http.Agent
     httpsAgent!: http.Agent
     private child?: ChildProcess
+    private wire?: ProxyWire
     private channel?: StreamChannel
     private states = new Map<string, State>()
     private tunnels = new Map<string, Duplex>()
@@ -127,14 +129,14 @@ export class Proxy {
         this.errors.push(hook)
     }
     private send(message: Record<string, unknown>) {
-        if (this.child?.connected) this.child.send(message, () => {})
+        if (this.child?.stdin?.writable && !this.child.stdin.destroyed) this.wire?.send(message)
     }
     private fail(id: string, error: unknown) {
         const value = error instanceof Error ? error : new Error(String(error))
         const state = this.states.get(id)
         const ws = this.websockets.get(id)
         if (ws) ws.error?.(ws.context, value)
-        this.errors.forEach((hook) => hook(state?.context ?? null, value, 'WHISTLE_ERROR'))
+        this.errors.forEach((hook) => hook(state?.context ?? null, value, 'GOPROXY_ERROR'))
         this.send({ type: 'abort', id })
         state?.socket.destroy()
         this.states.delete(id)
@@ -318,7 +320,7 @@ export class Proxy {
             const state = this.states.get(id)
             if (message.aborted && state)
                 this.errors.forEach((hook) =>
-                    hook(state.context, new Error('Client disconnected'), 'WHISTLE_ABORT')
+                    hook(state.context, new Error('Client disconnected'), 'GOPROXY_ABORT')
                 )
             state?.socket.destroy()
             this.channel?.cancel(`${id}:`)
@@ -397,29 +399,20 @@ export class Proxy {
         this.httpsAgent = options.httpsAgent
         this.httpServer = new EventEmitter()
         const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+        const binary = process.platform === 'win32' ? 'fluxy-proxy.exe' : 'fluxy-proxy'
         const runtime =
-            resources && existsSync(join(resources, 'whistle', 'child.cjs'))
-                ? join(resources, 'whistle')
-                : resolve('build/whistle')
-        const certDir = join(options.sslCaDir, 'whistle')
-        mkdirSync(certDir, { recursive: true, mode: 0o700 })
+            resources && existsSync(join(resources, 'proxy', binary))
+                ? join(resources, 'proxy', binary)
+                : resolve('build/goproxy', binary)
         const root = this.options.root() ?? {
             certificate: readFileSync(join(options.sslCaDir, 'certs/ca.pem'), 'utf8'),
             key: readFileSync(join(options.sslCaDir, 'keys/ca.private.key'), 'utf8')
         }
-        writeFileSync(join(certDir, 'root.crt'), root.certificate, { mode: 0o600 })
-        writeFileSync(join(certDir, 'root.key'), root.key, { mode: 0o600 })
-        const child = (this.child = fork(join(runtime, 'child.cjs'), [], {
-            execArgv: [],
-            serialization: 'advanced',
-            stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-            env: {
-                ...process.env,
-                ELECTRON_RUN_AS_NODE: '1',
-                WHISTLE_PATH: join(options.sslCaDir, 'whistle-state'),
-                FLUXY_WHISTLE_RUNTIME: runtime
-            }
+        const child = (this.child = spawn(runtime, [], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            windowsHide: true
         }))
+        this.wire = new ProxyWire(child.stdin!)
         this.channel = new StreamChannel((message) => this.send(message))
         let settled = false,
             log = ''
@@ -431,25 +424,31 @@ export class Proxy {
             }
         }
         const timer = setTimeout(() => {
-            finish(new Error(`Whistle startup timed out: ${log}`))
+            finish(new Error(`goproxy startup timed out: ${log}`))
             this.close()
         }, 15000)
         child.stdout?.on('data', (data) => {
-            log = (log + data).slice(-8000)
+            try {
+                this.wire?.receive(data)
+            } catch (error) {
+                finish(error instanceof Error ? error : new Error(String(error)))
+                void this.close()
+            }
         })
         child.stderr?.on('data', (data) => {
             log = (log + data).slice(-8000)
         })
         child.on('error', finish)
+        child.stdin?.on('error', finish)
         child.on('exit', (code) => {
-            const error = new Error(`Whistle exited (${code}): ${log}`)
+            const error = new Error(`goproxy exited (${code}): ${log}`)
             finish(error)
             if (this.child === child)
-                this.errors.forEach((hook) => hook(null, error, 'WHISTLE_EXIT'))
-            for (const id of this.states.keys()) this.fail(id, new Error('Whistle stopped'))
+                this.errors.forEach((hook) => hook(null, error, 'GOPROXY_EXIT'))
+            for (const id of this.states.keys()) this.fail(id, new Error('goproxy stopped'))
             this.channel?.close()
         })
-        child.on('message', (message: any) => {
+        this.wire.on('message', (message: any) => {
             if (message.type === 'ready') finish()
             else void this.message(message).catch((error) => this.fail(message.id, error))
         })
@@ -457,7 +456,7 @@ export class Proxy {
             type: 'start',
             port: options.port,
             host: options.host,
-            certDir
+            root
         })
     }
     async close() {

@@ -64,28 +64,23 @@ with the application. Preserve Electron's bundled `LICENSE` and
 third-party components. Build and test dependencies are listed for source-build
 attribution; this table does not imply they are all shipped in the desktop app.
 
-## Embedded Whistle proxy
+## Embedded goproxy transport
 
-Whistle **2.10.9**, copyright its upstream authors, is distributed under the
-MIT License. Its source is pinned at revision
-`8d9ee8f5f30aff67e72cb2a8972bc5a0804bf25c` in
-[third_party/whistle](third_party/whistle), with the upstream license in
-[LICENSE](third_party/whistle/LICENSE).
+Fluxy embeds **goproxy v1.9.1** (`github.com/elazarl/goproxy`), distributed
+under the BSD-3-Clause license, in the `fluxy-proxy` Go child process.
+The adapter and exact module checksums are in [tools/goproxy](tools/goproxy).
+WebSocket framing uses `github.com/gobwas/ws` v1.4.0 (MIT), with
+`github.com/gobwas/httphead` v0.1.0 and `github.com/gobwas/pool` v0.2.1 (MIT).
+HTTP/2 and SOCKS routing use `golang.org/x/net` v0.55.0 and
+`golang.org/x/text` v0.39.0 (BSD-3-Clause).
 
-Fluxy applies the patches in [tools/whistle/patches](tools/whistle/patches) to a
-build copy: headless embedding, custom certificate/timing hooks, and preservation
-of gRPC trailers-only error metadata through HTTP/2 conversion. The submodule
-remains unmodified. Runtime dependencies, including `ws` and `proxy-agent`, are
-resolved by [tools/whistle/package-lock.json](tools/whistle/package-lock.json).
-Their package metadata and license files are shipped under `whistle/node_modules`;
-Whistle's license ships under `whistle/upstream/LICENSE`. The generated
-`whistle/manifest.json` records source revision, patch and lockfile checksums,
-source/dependency tree checksums, and the child entrypoint checksum.
+Every package includes `resources/proxy/licenses.txt` with the license texts
+for the compiled dependencies and Go runtime, and `resources/proxy/manifest.json`
+with the engine version, target and binary/module checksums. The source of truth
+for dependencies is [go.mod](tools/goproxy/go.mod) and [go.sum](tools/goproxy/go.sum).
 
 Protocol tests additionally use `@grpc/grpc-js` (Apache-2.0),
-`https-proxy-agent` (MIT) and `tsx` (MIT). `esbuild` (MIT) bundles the child
-entrypoint. These tools are development dependencies, not an additional proxy
-service shipped to users.
+`https-proxy-agent` (MIT) and `tsx` (MIT). These are development dependencies.
 
 ## Cross-platform Go Helper
 

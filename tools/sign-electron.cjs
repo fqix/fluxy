@@ -21,6 +21,11 @@ function refreshManifests(resources) {
             .digest('hex')
     })
     writeFileSync(helper + '.json', JSON.stringify(helperManifest, null, 2) + '\n')
+    const proxy = join(resources, 'proxy', 'fluxy-proxy')
+    const proxyManifestPath = join(resources, 'proxy', 'manifest.json')
+    const proxyManifest = JSON.parse(readFileSync(proxyManifestPath, 'utf8'))
+    proxyManifest.signedSHA256 = hash(proxy)
+    writeFileSync(proxyManifestPath, JSON.stringify(proxyManifest, null, 2) + '\n')
 }
 async function sign(options) {
     if (!options.identity) throw new Error("A signing identity is required (use '-' for ad-hoc signing)")
