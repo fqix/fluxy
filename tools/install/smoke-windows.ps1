@@ -26,8 +26,26 @@ foreach ($shell in @('powershell.exe', 'pwsh.exe')) {
     if (!(Select-String -LiteralPath $log -SimpleMatch 'FLUXY_INSTALL_SHELL_SURVIVED' -Quiet)) {
         throw "$shell did not reach the end of the installation command"
     }
-    $entry = Get-ChildItem HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall |
-        Get-ItemProperty | Where-Object { $_.DisplayName -eq 'Fluxy' } | Select-Object -First 1
+    # NSIS may use either registry view; inspect both explicitly from a 64-bit shell.
+    $entries = foreach ($view in @([Microsoft.Win32.RegistryView]::Registry64, [Microsoft.Win32.RegistryView]::Registry32)) {
+        $hive = [Microsoft.Win32.RegistryKey]::OpenBaseKey([Microsoft.Win32.RegistryHive]::CurrentUser, $view)
+        try {
+            $uninstall = $hive.OpenSubKey('Software\Microsoft\Windows\CurrentVersion\Uninstall')
+            if (!$uninstall) { continue }
+            try {
+                foreach ($name in $uninstall.GetSubKeyNames()) {
+                    $key = $uninstall.OpenSubKey($name)
+                    try {
+                        if ($key.GetValue('DisplayName') -like '*Fluxy*') {
+                            [PSCustomObject]@{ Name = $key.GetValue('DisplayName'); UninstallString = $key.GetValue('UninstallString'); View = $view.ToString() }
+                        }
+                    } finally { $key.Dispose() }
+                }
+            } finally { $uninstall.Dispose() }
+        } finally { $hive.Dispose() }
+    }
+    $entries | Format-List | Out-String | Write-Output
+    $entry = $entries | Select-Object -First 1
     if (!$entry -or $entry.UninstallString -notmatch '^"([^"]+)"') { throw 'Fluxy per-user uninstall registration is missing' }
     $executable = Join-Path (Split-Path $Matches[1] -Parent) 'Fluxy.exe'
     if (!(Test-Path -LiteralPath $executable)) { throw 'Installed Fluxy executable is missing' }
