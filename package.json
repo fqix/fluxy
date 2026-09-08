@@ -1,5 +1,6 @@
 {
   "name": "fluxy",
+  "desktopName": "fluxy.desktop",
   "version": "0.3.0",
   "description": "Fluxy network inspector — Electron and TypeScript desktop",
   "private": true,
@@ -257,7 +258,8 @@
       ]
     },
     "linux": {
-      "icon": "resources/icon.png",
+      "icon": "resources/linux-icons",
+      "syncDesktopName": true,
       "target": [
         "deb",
         "rpm"
