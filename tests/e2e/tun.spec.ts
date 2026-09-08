@@ -31,10 +31,35 @@ test('TUN capture domains persist and remain stopped when automatic startup is d
         expect(before.tun.available).toBe(true)
         await page.getByRole('button', { name: 'Proxy status and connection setup' }).click()
         await expect(page.getByRole('combobox', { name: 'Capture mode' })).toHaveValue('tun')
-        await expect(page.getByRole('button', { name: 'Start TUN', exact: true })).toBeEnabled()
+        const start = page.getByRole('button', { name: 'Start TUN', exact: true })
+        const domains = page.getByRole('textbox', { name: 'TUN capture domains' })
+        await expect(start).toBeDisabled()
+        await expect(domains).toHaveAttribute('aria-invalid', 'true')
+        await expect(page.locator('#tun-capture-domains-error')).toContainText(
+            'at least one capture domain'
+        )
+        expect(await page.evaluate(() => window.fluxy.start().catch(String))).toContain(
+            'at least one capture domain'
+        )
+        for (const invalid of [
+            '   ',
+            'https://example.com',
+            'example.com:443',
+            '127.0.0.1',
+            'example.com\na..com'
+        ]) {
+            await domains.fill(invalid)
+            await expect(start).toBeDisabled()
+            await expect(domains).toHaveAttribute('aria-invalid', 'true')
+            await expect(
+                page.getByRole('button', { name: 'Save TUN Settings', exact: true })
+            ).toBeDisabled()
+        }
         await page
             .getByRole('textbox', { name: 'TUN capture domains' })
             .fill('Example.com\n*.api.example.net')
+        await expect(domains).toHaveAttribute('aria-invalid', 'false')
+        await expect(start).toBeEnabled()
         await page.getByRole('button', { name: 'Save TUN Settings', exact: true }).click()
         await expect
             .poll(
@@ -48,6 +73,24 @@ test('TUN capture domains persist and remain stopped when automatic startup is d
         expect(after.tun.state).toBe('stopped')
         expect(after.settings.tun.captureDomains).toEqual(['example.com', 'api.example.net'])
         expect(after.settings.upstream).toEqual(before.settings.upstream)
+        // A malformed settings request is rejected by IPC, preserving the saved scope.
+        expect(
+            await page.evaluate(async () => {
+                const current = await window.fluxy.snapshot()
+                return window.fluxy
+                    .settings({
+                        ...current.settings,
+                        tun: {
+                            ...current.settings.tun,
+                            captureDomains: ['example.com', 'https://bad.test']
+                        }
+                    })
+                    .catch(String)
+            })
+        ).toContain('without a URL')
+        expect(
+            (await page.evaluate(() => window.fluxy.snapshot())).settings.tun.captureDomains
+        ).toEqual(['example.com', 'api.example.net'])
         await page.getByRole('combobox', { name: 'Capture mode' }).scrollIntoViewIfNeeded()
         await page.screenshot({ path: 'test-results/fluxy-tun-settings.png' })
         await app.close()

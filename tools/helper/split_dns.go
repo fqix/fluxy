@@ -18,6 +18,9 @@ const splitDNSAddress = "172.31.255.2"
 const fakeIPv6Range = "fd7a:115c:a1e0::/48"
 
 func validateCaptureDomains(domains []string) error {
+	if len(domains) == 0 {
+		return errors.New("at least one capture domain is required")
+	}
 	if len(domains) > 100 {
 		return errors.New("too many capture domains")
 	}
@@ -69,13 +72,10 @@ func applySplitDNSConfig(c map[string]any, p splitDNSParams) {
 		},
 		"rules": []any{map[string]any{
 			"inbound": []string{"capture"}, "query_type": []string{"A", "AAAA"},
-			"action": "route", "server": "fakeip", "rewrite_ttl": 1,
+			"domain_suffix": p.Domains,
+			"action":        "route", "server": "fakeip", "rewrite_ttl": 1,
 		}},
 		"final": "local", "independent_cache": true,
-	}
-	if len(p.Domains) > 0 {
-		dns := c["dns"].(map[string]any)
-		dns["rules"].([]any)[0].(map[string]any)["domain_suffix"] = p.Domains
 	}
 	route := c["route"].(map[string]any)
 	rules := route["rules"].([]any)

@@ -88,7 +88,7 @@ test('successful setup remembers SOCKS mode and restores it until auto-start is 
     }
 })
 
-test('TUN auto-start attempts the saved mode and reports an unavailable exit without changing modes', async () => {
+test('TUN auto-start rejects missing capture domains without changing modes or starting capture', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-tun-startup-'))
     await writeFile(
         join(directory, 'preferences.json'),
@@ -107,10 +107,15 @@ test('TUN auto-start attempts the saved mode and reports an unavailable exit wit
     try {
         const page = await app.firstWindow()
         await expect
-            .poll(async () => (await page.evaluate(() => window.fluxy.snapshot())).tun.state)
-            .toBe('error')
+            .poll(async () =>
+                (await page.evaluate(() => window.fluxy.snapshot())).logs.some((entry) =>
+                    entry.message.includes('at least one capture domain')
+                )
+            )
+            .toBe(true)
         const state = await page.evaluate(() => window.fluxy.snapshot())
-        expect(state.tun.error).toContain('Selected exit interface is unavailable')
+        expect(state.tun.state).toBe('stopped')
+        expect(state.settings.tun.captureDomains).toEqual([])
         expect(state.settings.captureMode).toBe('tun')
         expect(state.settings.autoStart).toBe(true)
         expect(state.settings.tun.routeCIDRs).toEqual(['203.0.113.123/32'])

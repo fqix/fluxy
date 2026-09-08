@@ -15,9 +15,6 @@ import (
 
 func splitDNSScript(name string, domains []string) string {
 	matches := strings.Join(domains, " ")
-	if len(domains) == 0 {
-		matches = `""`
-	}
 	key := "State:/Network/Service/" + serviceID + "." + name + "/DNS"
 	return "d.init\n" +
 		"d.add ServerAddresses * " + splitDNSAddress + "\n" +

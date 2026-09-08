@@ -1,4 +1,4 @@
-import type { Settings } from '../../shared/contracts/model'
+import { requiredCaptureDomainsSchema, type Settings } from '../../shared/contracts/model'
 
 interface Engine {
     running: boolean
@@ -56,6 +56,10 @@ export class CaptureController {
             if (this.settings().captureMode === 'tun') {
                 if (generation !== this.startGeneration) return
                 if (this.tun.status.state === 'running') return
+                const domains = requiredCaptureDomainsSchema.safeParse(
+                    this.settings().tun.captureDomains
+                )
+                if (!domains.success) throw new Error(domains.error.issues[0].message)
                 if (this.beforeTunStart) {
                     const controller = new AbortController()
                     this.preparing = controller

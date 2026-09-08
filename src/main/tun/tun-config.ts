@@ -51,7 +51,7 @@ export function tunConfig(options: {
                       {
                           inbound: ['capture'],
                           query_type: ['A', 'AAAA'],
-                          ...(splitDNS.domains.length ? { domain_suffix: splitDNS.domains } : {}),
+                          domain_suffix: splitDNS.domains,
                           action: 'route',
                           server: 'fakeip',
                           rewrite_ttl: 1

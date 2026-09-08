@@ -20,17 +20,22 @@ export const captureDomainsSchema = z
             .pipe(
                 z
                     .string()
-                    .min(1)
-                    .max(253)
+                    .min(1, 'Enter a nonempty capture domain')
+                    .max(253, 'Capture domains must be at most 253 characters')
                     .regex(
                         /^(?![0-9.]+$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/,
                         'Enter a domain such as example.com, without a URL, port or path'
                     )
             )
     )
-    .max(100)
+    .max(100, 'Enter at most 100 capture domains')
     .transform((domains) => [...new Set(domains)])
     .default([])
+
+// Empty saved settings remain valid for first run and migration; starting TUN requires a scope.
+export const requiredCaptureDomainsSchema = captureDomainsSchema.pipe(
+    z.array(z.string()).min(1, 'Add at least one capture domain before starting TUN')
+)
 
 export const tunSettingsSchema = z.object({
     captureDomains: captureDomainsSchema,

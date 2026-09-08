@@ -6,7 +6,7 @@ import { promisify } from 'node:util'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import { discoverProxyProcesses } from './proxy-discovery'
-import { captureDomainsSchema } from '../../shared/contracts/model'
+import { requiredCaptureDomainsSchema } from '../../shared/contracts/model'
 
 export const fakeIPRanges = ['198.19.0.0/16', '100.127.0.0/16', '172.30.0.0/16'] as const
 export const fakeIPv6Range = 'fd7a:115c:a1e0::/48'
@@ -72,19 +72,15 @@ export function selectFakeIPRange(routes: string): string {
 export async function prepareSplitDNS(
     signal: AbortSignal,
     prompt: (options: MessageBoxOptions) => Promise<MessageBoxReturnValue>,
-    captureDomains: string[] = [],
+    captureDomains: string[],
     options: { interactive?: boolean } = {}
-): Promise<SplitDNS | undefined | null> {
-    // Supplemental resolver ownership is implemented for macOS; other platforms keep
-    // their existing explicit TUN exit until they have an equivalent DNS lifecycle.
-    const domains = captureDomainsSchema.parse(captureDomains)
+): Promise<SplitDNS | null> {
+    const domains = requiredCaptureDomainsSchema.parse(captureDomains)
     if (process.platform !== 'darwin') {
-        if (domains.length) throw new Error('Domain-based TUN capture currently requires macOS')
-        return undefined
+        throw new Error('Domain-based TUN capture currently requires macOS')
     }
     const processes = await discoverProxyProcesses()
     if (signal.aborted) return null
-    if (!processes.length && !domains.length) return undefined
     const { stdout } = await promisify(execFile)('/usr/sbin/netstat', ['-rn', '-f', 'inet'], {
         timeout: 5000
     })
@@ -104,7 +100,7 @@ export async function prepareSplitDNS(
         type: 'info',
         title: 'TUN coexistence',
         message: `${[...new Set(processes.map((p) => p.name))].join(' / ')} is running.`,
-        detail: `Fluxy will keep TUN mode and use its own sing-box DNS to allocate Fake IPs (${ipv4Range}). ${domains.length ? `Only these domains and their subdomains use Fluxy DNS: ${domains.join(', ')}.` : 'All domains use Fluxy DNS.'} Only Fluxy’s Fake IP ranges enter its TUN. Real connections keep the existing network routes. DNS is restored when capture stops.`,
+        detail: `Fluxy will keep TUN mode and use its own sing-box DNS to allocate Fake IPs (${ipv4Range}). Only these domains and their subdomains use Fluxy DNS: ${domains.join(', ')}. Only Fluxy’s Fake IP ranges enter its TUN. Real connections keep the existing network routes. DNS is restored when capture stops.`,
         buttons: ['Start TUN', 'Cancel'],
         defaultId: 0,
         cancelId: 1,

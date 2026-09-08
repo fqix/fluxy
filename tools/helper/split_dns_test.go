@@ -7,7 +7,7 @@ import (
 
 func TestSplitDNSValidation(t *testing.T) {
 	p := tunParams{BridgePort: 6060, EgressPort: 6061, Password: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		InterfaceName: "utun2345", SplitDNS: &splitDNSParams{IPv4Range: "198.19.0.0/16", Server: "192.168.1.1"}}
+		InterfaceName: "utun2345", SplitDNS: &splitDNSParams{IPv4Range: "198.19.0.0/16", Server: "192.168.1.1", Domains: []string{"example.com"}}}
 	if runtime.GOOS != "darwin" {
 		if p.SplitDNS.validate() == nil {
 			t.Fatal("accepted unsupported platform")
@@ -21,6 +21,8 @@ func TestSplitDNSValidation(t *testing.T) {
 		name   string
 		change func(*tunParams)
 	}{
+		{"missing domains", func(p *tunParams) { p.SplitDNS.Domains = nil }},
+		{"invalid domain", func(p *tunParams) { p.SplitDNS.Domains = []string{"https://example.com"} }},
 		{"default route", func(p *tunParams) { p.SplitDNS.IPv4Range = "0.0.0.0/0" }},
 		{"DNS loop", func(p *tunParams) { p.SplitDNS.Server = splitDNSAddress }},
 		{"fake IPv4 loop", func(p *tunParams) { p.SplitDNS.Server = "198.19.1.1" }},
@@ -46,7 +48,7 @@ func TestSplitDNSConfig(t *testing.T) {
 	p := validParams()
 	p.SocksPort = 0
 	p.RouteCIDRs = nil
-	p.SplitDNS = &splitDNSParams{IPv4Range: "198.19.0.0/16", Server: "192.168.1.1"}
+	p.SplitDNS = &splitDNSParams{IPv4Range: "198.19.0.0/16", Server: "192.168.1.1", Domains: []string{"example.com"}}
 	c := config(p)
 	inbound := c["inbounds"].([]any)[0].(map[string]any)
 	routes := inbound["route_address"].([]string)
@@ -67,12 +69,25 @@ func TestSplitDNSConfig(t *testing.T) {
 }
 
 func TestCaptureDomains(t *testing.T) {
-	for _, domains := range [][]string{nil, {"example.com", "api.example.net"}} {
+	for _, domains := range [][]string{{"example.com"}, {"example.com", "api.example.net"}} {
 		if err := validateCaptureDomains(domains); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for _, domain := range []string{"", ".", "*", "*.example.com", "https://example.com", "example.com:443", "a..com", "example.com\nremove other", "127.0.0.1", "Example.com"} {
+	for _, test := range []struct {
+		name    string
+		domains []string
+	}{
+		{"nil domains", nil},
+		{"empty domains", []string{}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if validateCaptureDomains(test.domains) == nil {
+				t.Fatal("accepted missing capture domains")
+			}
+		})
+	}
+	for _, domain := range []string{"", "   ", ".", "*", "*.example.com", "https://example.com", "example.com:443", "example.com/path", "a..com", "-a.com", "a-.com", "a_b.com", "example.com\nremove other", "127.0.0.1", "::1", "Example.com"} {
 		t.Run(domain, func(t *testing.T) {
 			if validateCaptureDomains([]string{domain}) == nil {
 				t.Fatal("accepted unsafe resolver domain")

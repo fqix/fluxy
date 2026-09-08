@@ -3,7 +3,10 @@ import { CaptureController } from '../../src/main/capture/capture'
 import { settingsSchema } from '../../src/shared/contracts/model'
 
 function setup() {
-    const settings = settingsSchema.parse({ captureMode: 'proxy' })
+    const settings = settingsSchema.parse({
+        captureMode: 'proxy',
+        tun: { captureDomains: ['example.com'] }
+    })
     const calls: string[] = []
     const engine = {
         running: false,
@@ -132,6 +135,39 @@ describe('automatic system proxy capture', () => {
 })
 
 describe('TUN exit preparation', () => {
+    it.each([
+        { domains: [], error: 'at least one capture domain' },
+        { domains: ['   '], error: 'nonempty capture domain' },
+        { domains: ['example.com', 'https://example.net'], error: 'without a URL' },
+        { domains: ['127.0.0.1'], error: 'without a URL' }
+    ])(
+        'blocks manual and automatic TUN startup for $domains before any side effects',
+        async ({ domains, error }) => {
+            const { settings, engine, tun, proxy } = setup()
+            settings.captureMode = 'tun'
+            settings.tun.captureDomains = domains
+            settings.autoStart = true
+            proxy.enabled = true
+            const prepare = vi.fn(async () => true)
+            const capture = new CaptureController(() => settings, engine, tun, proxy, prepare)
+            await expect(capture.start()).rejects.toThrow(error)
+            await expect(capture.restore()).rejects.toThrow(error)
+            expect(prepare).not.toHaveBeenCalled()
+            expect(tun.start).not.toHaveBeenCalled()
+            expect(engine.start).not.toHaveBeenCalled()
+            expect(proxy.set).not.toHaveBeenCalled()
+            expect(settings.tun.captureDomains).toEqual(domains)
+            settings.tun.captureDomains = ['example.com']
+            await capture.start()
+            expect(tun.start).toHaveBeenCalledOnce()
+        }
+    )
+    it('allows HTTP proxy capture without TUN domains', async () => {
+        const { settings, capture, engine } = setup()
+        settings.tun.captureDomains = []
+        await capture.start()
+        expect(engine.running).toBe(true)
+    })
     it.each(['proxy', 'tun'] as const)(
         'restores saved %s mode only when auto-start is enabled',
         async (mode) => {

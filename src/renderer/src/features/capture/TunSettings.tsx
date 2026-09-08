@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import type { Run } from '@/types/actions'
 import { useState } from 'react'
 import { Network, Play, Square } from 'lucide-react'
-import type { Snapshot } from '@shared/contracts/model'
+import { requiredCaptureDomainsSchema, type Snapshot } from '@shared/contracts/model'
 
 export function TunSettingsPanel({
     snapshot,
@@ -15,11 +15,16 @@ export function TunSettingsPanel({
     compact?: boolean
 }) {
     const [domains, setDomains] = useState(snapshot.settings.tun.captureDomains.join('\n'))
+    const parsedDomains = requiredCaptureDomainsSchema.safeParse(
+        domains.split(/[\s,]+/).filter(Boolean)
+    )
+    const domainError = parsedDomains.success ? undefined : parsedDomains.error.issues[0].message
     const [saving, setSaving] = useState(false)
     const active = ['starting', 'running', 'stopping'].includes(snapshot.tun.state)
     const locked = snapshot.running || active || saving
     const isTun = snapshot.settings.captureMode === 'tun'
     const save = async (mode = snapshot.settings.captureMode) => {
+        if (mode === 'tun' && domainError) throw new Error(domainError)
         setSaving(true)
         try {
             const current = await window.fluxy.snapshot()
@@ -51,7 +56,13 @@ export function TunSettingsPanel({
                     aria-label="Capture mode"
                     disabled={locked}
                     value={snapshot.settings.captureMode}
-                    onChange={(e) => void run(() => save(e.target.value as 'proxy' | 'tun'))}
+                    onChange={(e) => {
+                        const captureMode = e.target.value as 'proxy' | 'tun'
+                        void run(async () => {
+                            const current = await window.fluxy.snapshot()
+                            await window.fluxy.settings({ ...current.settings, captureMode })
+                        })
+                    }}
                 >
                     <option value="proxy">HTTP Proxy</option>
                     <option value="tun">TUN · all applications</option>
@@ -99,6 +110,9 @@ export function TunSettingsPanel({
                         Capture domains
                         <Textarea
                             aria-label="TUN capture domains"
+                            aria-invalid={!!domainError}
+                            aria-describedby="tun-capture-domains-hint tun-capture-domains-error"
+                            required
                             rows={3}
                             placeholder={'example.com\napi.example.net'}
                             disabled={locked}
@@ -106,6 +120,13 @@ export function TunSettingsPanel({
                             onChange={(e) => setDomains(e.target.value)}
                         />
                     </label>
+                    <p className="muted" id="tun-capture-domains-hint">
+                        Required. Enter at least one domain, one per line. Subdomains are included.
+                        Use domain names without a URL, IP address, port or path.
+                    </p>
+                    <p className="welcome-error" id="tun-capture-domains-error" aria-live="polite">
+                        {domainError}
+                    </p>
                     <div className="tun-status" role="status">
                         <span
                             className={`dot ${snapshot.tun.state === 'running' ? 'green' : ''}`}
@@ -121,7 +142,7 @@ export function TunSettingsPanel({
                     )}
                     <div className="button-row">
                         <Button
-                            disabled={locked}
+                            disabled={locked || !!domainError}
                             onClick={() => void run(() => save(), 'TUN settings saved')}
                         >
                             Save TUN Settings
@@ -137,7 +158,7 @@ export function TunSettingsPanel({
                         ) : (
                             <Button
                                 className="primary"
-                                disabled={saving || !snapshot.tun.available}
+                                disabled={saving || !snapshot.tun.available || !!domainError}
                                 onClick={() =>
                                     void run(async () => {
                                         await save()

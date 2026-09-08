@@ -42,7 +42,7 @@ npm run dev
 
 ## 主要功能
 
-- HTTP/HTTPS 抓包、WebSocket 检查、系统代理和 macOS、Linux、Windows TUN。
+- HTTP/HTTPS 抓包、WebSocket 检查、系统代理和 macOS 按域名 TUN 捕获。
 - 应用来源识别、高级筛选、项目、会话及 HAR 导入导出。
 - 请求/响应断点、映射及请求头规则、网络预设和双向限速。
 - 请求/响应/耗时及文本 Diff、历史、置顶和导出。
@@ -53,7 +53,9 @@ AI 助手已移除。实现范围及边界见[功能补全记录](ELECTRON.md)�
 
 ### TUN 兼容性说明
 
-当前 Fluxy 的 TUN 模式会与 Clash、sing-box 冲突。启用 Fluxy TUN 前，请先关闭这些应用的 TUN 模式或退出应用，避免同时启用多个 TUN 模式。
+启动 TUN 前必须填写至少一个合法的捕获域名，每行一个，包含其子域名。空列表或任意非法域名都会阻止手动启动和自动恢复；不接受 URL、IP 地址、端口或路径。域名会统一为小写、去重，并规范化开头的 `*.` 和末尾的点。
+
+按域名 TUN 捕获目前仅支持 macOS。使用自动出口设置并清空显式路由 CIDR 后，Fluxy 可通过自己的 Split DNS / Fake IP 与 Mihomo、sing-box 共存，仅捕获所选域名；停止时移除临时 DNS 配置。Linux 和 Windows 请使用 HTTP Proxy 模式。
 
 ## 验证与打包
 

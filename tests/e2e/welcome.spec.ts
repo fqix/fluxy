@@ -31,12 +31,26 @@ test('first-run setup reads real status, handles cancellation and persists expli
             'Helper & Certificate Setup'
         )
         await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
+        const captureDomains = welcome.getByRole('textbox', {
+            name: 'Capture domains',
+            exact: true
+        })
+        await expect(captureDomains).toHaveAttribute('aria-invalid', 'true')
+        await expect(welcome.locator('#welcome-capture-domains-error')).toContainText(
+            'at least one capture domain'
+        )
+        await captureDomains.fill('https://example.com')
+        await expect(captureDomains).toHaveAttribute('aria-invalid', 'true')
+        await expect(welcome.locator('#welcome-capture-domains-error')).toContainText(
+            'without a URL'
+        )
         await expect(
             welcome.getByRole('button', { name: 'Save Domains', exact: true })
         ).toHaveCount(0)
         await welcome
             .getByRole('textbox', { name: 'Capture domains', exact: true })
             .fill('example.com')
+        await expect(captureDomains).toHaveAttribute('aria-invalid', 'false')
         // Editing alone does not save: Enable owns saving and starting capture.
         expect(
             (await page.evaluate(() => window.fluxy.snapshot())).settings.tun.captureDomains

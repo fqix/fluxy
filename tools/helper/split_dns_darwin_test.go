@@ -49,7 +49,7 @@ func TestSplitDNSResolverOwnership(t *testing.T) {
 	if err = cleanup(); err != nil {
 		t.Fatal("cleanup was not idempotent:", err)
 	}
-	if _, err = startSplitDNSProcess("utun2345\nremove other", nil, exec.Command("unused")); err == nil {
+	if _, err = startSplitDNSProcess("utun2345\nremove other", []string{"example.com"}, exec.Command("unused")); err == nil {
 		t.Fatal("accepted an unbounded resolver key")
 	}
 }
@@ -60,10 +60,22 @@ func TestSplitDNSDomainScope(t *testing.T) {
 		strings.Contains(script, `SupplementalMatchDomains * ""`) {
 		t.Fatal("resolver is not restricted to the selected suffixes")
 	}
-	if !strings.Contains(splitDNSScript("utun2345", nil), `SupplementalMatchDomains * ""`) {
-		t.Fatal("empty list lost all-domain mode")
-	}
-	if _, err := startSplitDNSProcess("utun2345", []string{"example.com\nremove other"}, exec.Command("unused")); err == nil {
-		t.Fatal("unvalidated domain reached scutil")
+	for _, test := range []struct {
+		name    string
+		domains []string
+	}{
+		{"nil domains", nil},
+		{"empty domains", []string{}},
+		{"invalid domain", []string{"example.com\nremove other"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			command := exec.Command("unused")
+			if _, err := startSplitDNSProcess("utun2345", test.domains, command); err == nil {
+				t.Fatal("unvalidated domain reached scutil")
+			}
+			if command.Process != nil {
+				t.Fatal("started a resolver process for invalid domains")
+			}
+		})
 	}
 }

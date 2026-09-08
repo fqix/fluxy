@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { parseProxyProcesses } from '../../src/main/tun/proxy-discovery'
 import { selectFakeIPRange, fakeIPv6Range } from '../../src/main/tun/split-dns'
 import { tunConfig } from '../../src/main/tun/tun-config'
-import { settingsSchema, captureDomainsSchema } from '../../src/shared/contracts/model'
+import {
+    settingsSchema,
+    captureDomainsSchema,
+    requiredCaptureDomainsSchema
+} from '../../src/shared/contracts/model'
 
 describe('Fake IP TUN coexistence', () => {
     it('normalizes and persists bounded DNS names while keeping old settings compatible', () => {
@@ -20,11 +24,27 @@ describe('Fake IP TUN coexistence', () => {
         '-a.com',
         'a-.com',
         '127.0.0.1',
+        '::1',
+        '',
+        '   ',
+        '.',
+        '*.',
         '*',
+        'a_b.example.com',
         'com\nremove other',
         'a'.repeat(64) + '.com'
     ])('rejects invalid capture domain %s', (value) => {
         expect(() => captureDomainsSchema.parse([value])).toThrow()
+        expect(() => requiredCaptureDomainsSchema.parse(['example.com', value])).toThrow()
+    })
+    it('requires valid domains for startup while allowing empty saved settings', () => {
+        expect(() => requiredCaptureDomainsSchema.parse([])).toThrow('at least one capture domain')
+        expect(() => requiredCaptureDomainsSchema.parse(undefined)).toThrow(
+            'at least one capture domain'
+        )
+        expect(requiredCaptureDomainsSchema.parse(['Example.COM.', '*.example.com'])).toEqual([
+            'example.com'
+        ])
     })
     it('recognizes external cores without matching Fluxy or paths containing a proxy name', () => {
         expect(

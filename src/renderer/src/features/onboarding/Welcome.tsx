@@ -2,7 +2,11 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Check, Network, Wrench } from 'lucide-react'
-import type { CertificateStatus, Snapshot } from '@shared/contracts/model'
+import {
+    requiredCaptureDomainsSchema,
+    type CertificateStatus,
+    type Snapshot
+} from '@shared/contracts/model'
 import icon from '@assets/icon.png'
 
 export function Welcome({
@@ -23,6 +27,10 @@ export function Welcome({
     const tunActive = ['starting', 'running', 'stopping'].includes(snapshot.tun.state)
     const savedDomains = snapshot.settings.tun.captureDomains.join('\n')
     const [domains, setDomains] = useState(savedDomains)
+    const parsedDomains = requiredCaptureDomainsSchema.safeParse(
+        domains.split(/[\s,]+/).filter(Boolean)
+    )
+    const domainError = parsedDomains.success ? undefined : parsedDomains.error.issues[0].message
     useEffect(() => setDomains(savedDomains), [savedDomains])
     const [showOnLaunch, setShowOnLaunch] = useState(snapshot.settings.showWelcomeOnLaunch)
     useEffect(
@@ -77,12 +85,13 @@ export function Welcome({
             else close()
         })
     const saveDomains = async () => {
+        if (!parsedDomains.success) throw new Error(domainError)
         const current = await window.fluxy.snapshot()
         await window.fluxy.settings({
             ...current.settings,
             tun: {
                 ...current.settings.tun,
-                captureDomains: domains.split(/[\s,]+/).filter(Boolean)
+                captureDomains: parsedDomains.data
             }
         })
     }
@@ -131,7 +140,7 @@ export function Welcome({
                     : snapshot.running,
             label: 'Enable',
             disabled: isTun
-                ? !setupReady || tunActive || snapshot.running
+                ? !setupReady || tunActive || snapshot.running || !!domainError
                 : !certificate || snapshot.running || tunActive,
             action: () =>
                 act(isTun ? 'Starting TUN…' : 'Starting SOCKS5 proxy…', async () => {
@@ -302,7 +311,9 @@ export function Welcome({
                                                 </label>
                                                 <Textarea
                                                     id="welcome-capture-domains"
-                                                    aria-describedby="welcome-capture-domains-hint"
+                                                    aria-describedby="welcome-capture-domains-hint welcome-capture-domains-error"
+                                                    aria-invalid={!!domainError}
+                                                    required
                                                     rows={2}
                                                     placeholder={'example.com\napi.example.org'}
                                                     value={domains}
@@ -312,11 +323,19 @@ export function Welcome({
                                                     onChange={(e) => setDomains(e.target.value)}
                                                 />
                                                 <p id="welcome-capture-domains-hint">
-                                                    Optional, macOS only. One domain per line,
-                                                    including subdomains. Leave empty to capture all
-                                                    domains. Use automatic exit settings and leave
+                                                    Required, macOS only. Enter at least one valid
+                                                    domain, one per line, including subdomains. Use
+                                                    domain names without a URL, IP address, port or
+                                                    path. Use automatic exit settings and leave
                                                     route CIDRs empty in TUN settings. Enable saves
                                                     these domains before starting.
+                                                </p>
+                                                <p
+                                                    id="welcome-capture-domains-error"
+                                                    className="welcome-error"
+                                                    aria-live="polite"
+                                                >
+                                                    {domainError}
                                                 </p>
                                             </div>
                                         )}

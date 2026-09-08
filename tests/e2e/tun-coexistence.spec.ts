@@ -9,7 +9,11 @@ test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async ()
     await writeFile(
         join(directory, 'preferences.json'),
         JSON.stringify({
-            settings: { onboardingCompleted: true, showWelcomeOnLaunch: false },
+            settings: {
+                onboardingCompleted: true,
+                showWelcomeOnLaunch: false,
+                tun: { captureDomains: ['example.com'] }
+            },
             rules: []
         })
     )
