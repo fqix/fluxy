@@ -35,6 +35,9 @@ test('first-run setup reads real status, handles cancellation and persists expli
             name: 'Capture domains',
             exact: true
         })
+        await expect(captureDomains).toHaveValue('github.com\ngoogle.com')
+        await expect(captureDomains).toHaveAttribute('aria-invalid', 'false')
+        await captureDomains.fill('')
         await expect(captureDomains).toHaveAttribute('aria-invalid', 'true')
         await expect(welcome.locator('#welcome-capture-domains-error')).toContainText(
             'at least one capture domain'
@@ -91,7 +94,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
         await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
         await expect(
             welcome.getByRole('textbox', { name: 'Capture domains', exact: true })
-        ).toHaveValue('')
+        ).toHaveValue('github.com\ngoogle.com')
         await app.evaluate(() => {
             const cp = process.getBuiltinModule('node:child_process')!
             const original = cp.spawn

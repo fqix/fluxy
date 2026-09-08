@@ -25,7 +25,8 @@ export function Welcome({
     const isTun = snapshot.settings.captureMode === 'tun'
     const helperReady = snapshot.helper.state === 'ready'
     const tunActive = ['starting', 'running', 'stopping'].includes(snapshot.tun.state)
-    const savedDomains = snapshot.settings.tun.captureDomains.join('\n')
+    const savedDomains =
+        snapshot.settings.tun.captureDomains.join('\n') || 'github.com\ngoogle.com'
     const [domains, setDomains] = useState(savedDomains)
     const parsedDomains = requiredCaptureDomainsSchema.safeParse(
         domains.split(/[\s,]+/).filter(Boolean)
