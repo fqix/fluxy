@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import * as cp from 'node:child_process'
 import { promisify } from 'node:util'
 import {
@@ -90,10 +90,66 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         const path = await ensureCertificate(join(directory, 'certificates'))
         const der = new X509Certificate(await readFile(path)).raw.toString('base64')
         await expect(invoke(production, ['validate-ca'], der)).resolves.toBe('')
+        await expect(
+            invoke(
+                testHelper,
+                ['authorize-desktop'],
+                JSON.stringify({ command: 'exit 0', certificate: der })
+            )
+        ).rejects.toThrow('Desktop authorization is disabled')
+        await expect(
+            invoke(
+                testHelper,
+                ['authorize-desktop'],
+                JSON.stringify({ command: 'exit 0', certificate: 'invalid' })
+            )
+        ).rejects.toThrow()
+
+        await expect(invoke(testHelper, ['trust-ca-desktop'], JSON.stringify(der))).rejects.toThrow(
+            'CA mutations are disabled'
+        )
         await expect(invoke(production, ['validate-ca'], 'dGVzdA==')).rejects.toThrow('Invalid CA')
         await expect(invoke(production, ['validate-ca'], 'A'.repeat(24001))).rejects.toThrow(
             'Invalid CA'
         )
+    })
+    it('runs desktop trust without elevation and permits retry after failure', async () => {
+        const authorize = vi.fn()
+        const helper = new HelperService(
+            directory,
+            testHelper,
+            core,
+            () => {},
+            undefined,
+            authorize
+        )
+        helper.status = { state: 'ready' }
+        const internals = helper as unknown as {
+            operation(method: string, params: unknown, timeout: number): Promise<void>
+            assets(): Promise<unknown>
+        }
+        const operation = vi.spyOn(internals, 'operation').mockResolvedValue(undefined)
+        vi.spyOn(internals, 'assets').mockResolvedValue({})
+        const ca = new X509Certificate(
+            await readFile(await ensureCertificate(join(directory, 'desktop-ca')))
+        ).raw
+        try {
+            const first = helper.installCertificate(ca)
+            expect(helper.installCertificate(ca)).toBe(first)
+            await expect(helper.install()).rejects.toThrow('Wait for certificate trust')
+            await expect(helper.repair()).rejects.toThrow('Wait for certificate trust')
+            await expect(helper.uninstall()).rejects.toThrow('Wait for the current')
+            await expect(helper.removeCertificate(ca)).rejects.toThrow('Wait for certificate trust')
+            // The real test adapter refuses mutation before invoking native UI.
+            await expect(first).rejects.toThrow('CA mutations are disabled')
+            await expect(helper.installCertificate(ca)).rejects.toThrow('CA mutations are disabled')
+            expect(operation).toHaveBeenCalledTimes(2)
+            expect(operation).toHaveBeenCalledWith('ca.add', ca.toString('base64'), 30000)
+            expect(authorize).not.toHaveBeenCalled()
+            expect(helper.status.state).toBe('ready')
+        } finally {
+            helper.close()
+        }
     })
     async function server() {
         const root = await mkdtemp(join(directory, 'daemon-'))
@@ -280,7 +336,9 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         }
         let helper = new HelperService(client, production, core, () => {}, socket, authorize)
         try {
-            await Promise.all([helper.ensureInstalled(), helper.ensureInstalled()])
+            await expect(helper.ensureInstalled()).rejects.toThrow()
+            expect(authorizations).toBe(0)
+            await Promise.all([helper.install(), helper.install()])
             expect(helper.status.state).toBe('ready')
             expect(authorizations).toBe(1)
             for (let i = 0; i < 2; i++) {
@@ -307,6 +365,15 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             await helper.ensureInstalled()
             expect(helper.status.state).toBe('ready')
             expect(authorizations).toBe(1)
+            const refresh = vi.spyOn(helper, 'refresh').mockImplementation(async () => {
+                helper.status = { state: 'outdated' }
+                return helper.status
+            })
+            await expect(helper.startTun(params())).rejects.toThrow(
+                'Complete Helper & Certificate Setup'
+            )
+            expect(authorizations).toBe(1)
+            refresh.mockRestore()
         } finally {
             helper.close()
             worker?.kill('SIGTERM')

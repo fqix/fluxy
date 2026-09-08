@@ -105,6 +105,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 	"unsafe"
@@ -224,7 +225,8 @@ func trustCertificate(cert *x509.Certificate, install bool, base string) error {
 		defer cancel()
 		cmd := exec.CommandContext(ctx, "/usr/bin/security", args...)
 		cmd.Env = platformEnv()
-		return cmd.Run()
+		output, err := cmd.CombinedOutput()
+		return certificateCommandError(args[0], output, err)
 	}
 	if install {
 		if execute("verify-cert", "-c", path, "-p", "basic", "-l", "-L") == nil {
@@ -255,4 +257,16 @@ func trustCertificate(cert *x509.Certificate, install bool, base string) error {
 		return errors.New("certificate remains installed")
 	}
 	return nil
+}
+
+// Preserve security diagnostics instead of exposing only an exit status to the UI.
+func certificateCommandError(operation string, output []byte, err error) error {
+	if err == nil {
+		return nil
+	}
+	detail := strings.TrimSpace(string(output))
+	if len(detail) > 4096 {
+		detail = detail[:4096]
+	}
+	return fmt.Errorf("security %s: %w: %s", operation, err, detail)
 }

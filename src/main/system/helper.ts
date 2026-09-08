@@ -167,14 +167,17 @@ trap '/bin/rm -rf "$root"' EXIT
 /bin/launchctl bootstrap system ${shellQuote(plist)}
 /bin/launchctl kickstart system/${helperID}`
 }
-export function authorizeInstallation(command: string): Promise<void> {
+export function authorizeInstallation(
+    command: string,
+    helperPath: string,
+    certificate?: Buffer
+): Promise<void> {
     if (process.platform !== 'darwin') return authorizePortable(command)
     return new Promise<void>((resolve, reject) => {
-        const worker = spawn(
-            '/usr/bin/osascript',
-            ['-e', `do shell script ${JSON.stringify(command)} with administrator privileges`],
-            { stdio: ['ignore', 'pipe', 'pipe'] }
-        )
+        const worker = spawn(helperPath, ['authorize-desktop'], {
+            stdio: ['pipe', 'pipe', 'pipe'],
+            timeout: 180000
+        })
         let output = ''
         worker.stdout.on('data', (b) => {
             output = (output + b.toString()).slice(-16384)
@@ -186,8 +189,10 @@ export function authorizeInstallation(command: string): Promise<void> {
         worker.once('close', (code) =>
             code === 0
                 ? resolve()
-                : reject(new Error(output.trim() || 'Helper installation canceled or failed'))
+                : reject(new Error(output.trim() || 'Native helper setup canceled or failed'))
         )
+        worker.stdin.on('error', () => {})
+        worker.stdin.end(JSON.stringify({ command, certificate: certificate?.toString('base64') }))
     })
 }
 export function uninstallationScript() {
@@ -234,6 +239,8 @@ export class HelperService {
     private heartbeat?: NodeJS.Timeout
     private manifest?: Manifest
     private closing = false
+    private trustWorker?: ReturnType<typeof execFile>
+    private trusting?: Promise<void>
     onTunFailure?: (error: Error) => void
     private tunActive = false
     constructor(
@@ -242,7 +249,8 @@ export class HelperService {
         private corePath: string,
         private changed: () => void,
         private socketPath = helperSocket,
-        private authorize = authorizeInstallation
+        private authorize = (command: string, certificate?: Buffer) =>
+            authorizeInstallation(command, this.helperPath, certificate)
     ) {}
     private setStatus(status: HelperStatus) {
         this.status = status
@@ -337,22 +345,26 @@ export class HelperService {
         if (this.installing) return this.installing
         if (this.status.state === 'ready') return
         if (this.status.state === 'missing' || this.status.state === 'outdated')
-            return this.install()
+            throw new Error(
+                'Helper Tool needs installation or update. Complete Helper & Certificate Setup before starting capture.'
+            )
         throw new Error(
             this.status.error || 'Helper unavailable; open Helper Tool to repair installation'
         )
     }
-    install(): Promise<void> {
+    install(certificate?: Buffer): Promise<void> {
+        if (this.trusting) return Promise.reject(new Error('Wait for certificate trust to finish'))
         if (this.uninstalling) return Promise.reject(new Error('Helper Tool is being uninstalled'))
         if (this.installing) return this.installing
-        if (this.status.state === 'ready') return Promise.resolve()
+        if (this.status.state === 'ready')
+            return certificate ? this.installCertificate(certificate) : Promise.resolve()
         if (this.tunActive) return Promise.reject(new Error('Stop TUN before updating Helper Tool'))
-        this.installing = this.performInstall().finally(() => {
+        this.installing = this.performInstall(certificate).finally(() => {
             this.installing = undefined
         })
         return this.installing
     }
-    private async performInstall() {
+    private async performInstall(certificate?: Buffer) {
         this.removed = false
         this.setStatus({ state: 'installing' })
         let stage: string | undefined
@@ -423,7 +435,7 @@ export class HelperService {
                 process.platform === 'darwin'
                     ? `/bin/sh -c ${shellQuote(installationScript(stage, manifest, pairingHash, digest(await readFile(join(stage, 'service.plist')))))}`
                     : portableInstallationScript(stage, manifest, pairingHash)
-            await this.authorize(command)
+            await this.authorize(command, certificate)
             let lastError: unknown
             for (let attempt = 0; attempt < 40; attempt++) {
                 try {
@@ -447,6 +459,7 @@ export class HelperService {
         }
     }
     repair(): Promise<void> {
+        if (this.trusting) return Promise.reject(new Error('Wait for certificate trust to finish'))
         if (this.uninstalling) return Promise.reject(new Error('Helper Tool is being uninstalled'))
         if (this.installing) return this.installing
         if (this.tunActive)
@@ -459,7 +472,7 @@ export class HelperService {
         if (this.removed) return Promise.resolve()
         if (!supportedHelperPlatform())
             return Promise.reject(new Error('Unsupported helper platform'))
-        if (this.installing || this.operations)
+        if (this.installing || this.operations || this.trusting)
             return Promise.reject(new Error('Wait for the current Helper Tool operation to finish'))
         if (this.tunActive)
             return Promise.reject(new Error('Stop TUN before uninstalling Helper Tool'))
@@ -507,10 +520,42 @@ export class HelperService {
         }
     }
     async removeCertificate(der: Buffer) {
+        if (this.trusting) throw new Error('Wait for certificate trust to finish')
         await this.operation('ca.remove', der.toString('base64'), 90000)
     }
-    async installCertificate(der: Buffer) {
-        await this.operation('ca.install', der.toString('base64'), 90000)
+    installCertificate(der: Buffer): Promise<void> {
+        if (this.trusting) return this.trusting
+        this.trusting = (async () => {
+            if (process.platform !== 'darwin') {
+                await this.operation('ca.install', der.toString('base64'), 90000)
+                return
+            }
+            await this.operation('ca.add', der.toString('base64'), 30000)
+            // Run the bundled native adapter as the desktop user, never via
+            // osascript/sudo or launchd. Security.framework owns the trust prompt.
+            await this.assets()
+            if (this.closing) throw new Error('Fluxy is closing')
+            await new Promise<void>((resolve, reject) => {
+                this.trustWorker = execFile(
+                    this.helperPath,
+                    ['trust-ca-desktop'],
+                    {
+                        timeout: 180000,
+                        maxBuffer: 16384
+                    },
+                    (error, _stdout, stderr) => {
+                        this.trustWorker = undefined
+                        if (error) reject(new Error(stderr.trim() || error.message))
+                        else resolve()
+                    }
+                )
+                this.trustWorker.stdin!.on('error', () => {})
+                this.trustWorker.stdin!.end(JSON.stringify(der.toString('base64')))
+            })
+        })().finally(() => {
+            this.trusting = undefined
+        })
+        return this.trusting
     }
     async startTun(params: unknown) {
         await this.operation('tun.start', params, 30000)
@@ -530,6 +575,7 @@ export class HelperService {
     }
     close() {
         this.closing = true
+        this.trustWorker?.kill()
         clearInterval(this.heartbeat)
         this.rpc?.close()
         return this.uninstalling?.catch(() => {})

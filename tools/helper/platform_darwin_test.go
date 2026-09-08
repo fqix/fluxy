@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,5 +36,17 @@ func TestUnixPeerCredentials(t *testing.T) {
 	p.UID++
 	if peerAllowed(peer, p) {
 		t.Fatal("different user accepted")
+	}
+}
+
+func TestCertificateCommandError(t *testing.T) {
+	failure := errors.New("exit status 1")
+	detail := "SecTrustSettingsSetTrustSettings: The authorization was denied since no user interaction was possible."
+	err := certificateCommandError("add-trusted-cert", []byte(detail), failure)
+	if !errors.Is(err, failure) || !strings.Contains(err.Error(), detail) || !strings.Contains(err.Error(), "add-trusted-cert") {
+		t.Fatalf("lost diagnostic: %v", err)
+	}
+	if certificateCommandError("verify-cert", nil, nil) != nil {
+		t.Fatal("success reported as failure")
 	}
 }

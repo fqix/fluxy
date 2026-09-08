@@ -311,14 +311,18 @@ func serveConnection(ctx context.Context, c net.Conn, p pairing, base string) {
 			err = s.stop()
 		case "tun.start":
 			err = s.start(req.Params)
-		case "ca.install", "ca.remove":
+		case "ca.install", "ca.remove", "ca.add":
 			var cert *x509.Certificate
 			cert, err = certificate(req.Params)
-			if err == nil && req.Method == "ca.install" && (time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter)) {
+			if err == nil && req.Method != "ca.remove" && (time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter)) {
 				err = errors.New("certificate expired or not yet valid")
 			}
 			if err == nil {
-				err = trustCertificate(cert, req.Method == "ca.install", base)
+				if req.Method == "ca.add" {
+					err = addPublicCertificate(cert)
+				} else {
+					err = trustCertificate(cert, req.Method == "ca.install", base)
+				}
 			}
 		default:
 			err = errors.New("unsupported helper method")
@@ -391,6 +395,29 @@ func command() error {
 		return errors.New("oversized helper input")
 	}
 	switch os.Args[1] {
+	case "authorize-desktop":
+		var request struct {
+			Command     string `json:"command"`
+			Certificate string `json:"certificate"`
+		}
+		if err = decode(data, &request); err != nil {
+			return err
+		}
+		if request.Command == "" || strings.ContainsRune(request.Command, 0) {
+			return errors.New("invalid desktop setup command")
+		}
+		var cert *x509.Certificate
+		if request.Certificate != "" {
+			raw, _ := json.Marshal(request.Certificate)
+			cert, err = certificate(raw)
+			if err != nil {
+				return err
+			}
+			if time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter) {
+				return errors.New("certificate expired or not yet valid")
+			}
+		}
+		return authorizeDesktop(request.Command, cert)
 	case "validate-tun":
 		var p tunParams
 		if err = decode(data, &p); err != nil {
@@ -400,6 +427,15 @@ func command() error {
 			return err
 		}
 		return json.NewEncoder(os.Stdout).Encode(config(p))
+	case "trust-ca-desktop":
+		cert, err := certificate(data)
+		if err != nil {
+			return err
+		}
+		if time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter) {
+			return errors.New("certificate expired or not yet valid")
+		}
+		return desktopTrustCertificate(cert)
 	case "validate-ca":
 		raw, _ := json.Marshal(string(data))
 		if _, err = certificate(raw); err != nil {

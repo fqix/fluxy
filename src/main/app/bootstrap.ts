@@ -525,7 +525,30 @@ exec /bin/zsh -i
         return true
     })
     handle('helper:status', () => helper.refresh())
-    handle('helper:install', () => helper.install())
+    handle('helper:install', async () => {
+        if (customCertificates.rootIdentity())
+            throw new Error(
+                'A custom root issuer is active. Configure its trust separately before Helper setup.'
+            )
+        const directory = join(store.directory, 'certificates')
+        await ensureCertificate(directory)
+        const before = await certificateStatus(directory)
+        if (before.error) throw new Error(before.error)
+        const der = new X509Certificate(await readFile(engine.certificatePath)).raw
+        await helper.refresh()
+        if (process.platform === 'darwin') {
+            await helper.install(before.trusted ? undefined : der)
+        } else {
+            await helper.install()
+            if (!before.trusted) await helper.installCertificate(der)
+        }
+        const after = await certificateStatus(directory)
+        if (!after.trusted)
+            throw new Error(
+                after.error ||
+                    'Helper installed, but certificate trust verification failed. Retry Helper & Certificate Setup.'
+            )
+    })
     handle('helper:uninstall', async () => {
         if (!supportedHelperPlatform()) throw new Error('Unsupported helper platform')
         const answer = await dialog.showMessageBox(window!, {
@@ -838,6 +861,8 @@ exec /bin/zsh -i
             )
         await ensureCertificate(join(store.directory, 'certificates'))
         const der = new X509Certificate(await readFile(engine.certificatePath)).raw
+        const existing = await certificateStatus(join(store.directory, 'certificates'))
+        if (existing.trusted) return true
         await helper.installCertificate(der)
         const status = await certificateStatus(
             join(store.directory, 'certificates'),
