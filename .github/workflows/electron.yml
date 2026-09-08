@@ -8,7 +8,7 @@ on:
         'tests/**',
         'resources/**',
         'tools/sing-box/**',
-        'tools/whistle/**',
+        'tools/goproxy/**',
         'build-electron-core.mjs',
         'build-electron-helper.mjs',
         'tools/helper/**',
@@ -17,7 +17,6 @@ on:
         'install.sh',
         'install.ps1',
         'third_party/sing-box',
-        'third_party/whistle',
         'package*.json',
         '*config.ts',
         '.github/workflows/electron.yml'
@@ -29,7 +28,7 @@ on:
         'tests/**',
         'resources/**',
         'tools/sing-box/**',
-        'tools/whistle/**',
+        'tools/goproxy/**',
         'build-electron-core.mjs',
         'build-electron-helper.mjs',
         'tools/helper/**',
@@ -38,7 +37,6 @@ on:
         'install.sh',
         'install.ps1',
         'third_party/sing-box',
-        'third_party/whistle',
         'package*.json',
         '*config.ts',
         '.github/workflows/electron.yml'
@@ -63,6 +61,7 @@ jobs:
           cache-dependency-path: |
             tools/sing-box/go.sum
             tools/helper/go.sum
+            tools/goproxy/go.sum
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -82,8 +81,23 @@ jobs:
         working-directory: tools/helper
       - run: go vet ./...
         working-directory: tools/helper
+      - run: go test -race ./...
+        working-directory: tools/goproxy
+      - run: go vet ./...
+        working-directory: tools/goproxy
+      - name: Lint proxy transport
+        if: runner.os == 'Linux'
+        working-directory: tools/goproxy
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...
+      - name: Check proxy dependencies
+        if: runner.os == 'Linux'
+        working-directory: tools/goproxy
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
       - run: npm test
       - run: npm run test:protocol
+        env:
+          FLUXY_PROXY_RACE: '1'
+          GORACE: halt_on_error=1
       - run: powershell -NoProfile -File tools/install/test-windows.ps1
         if: runner.os == 'Windows'
       - run: go test -race -tags=with_gvisor ./...

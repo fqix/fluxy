@@ -51,6 +51,7 @@ jobs:
           cache-dependency-path: |
             tools/sing-box/go.sum
             tools/helper/go.sum
+            tools/goproxy/go.sum
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
@@ -82,8 +83,27 @@ jobs:
       - name: Install RPM build tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: go test -race ./...
+        working-directory: tools/goproxy
+        if: matrix.platform != 'win32' || matrix.arch != 'arm64'
+      - run: go test ./...
+        working-directory: tools/goproxy
+        if: matrix.platform == 'win32' && matrix.arch == 'arm64'
+      - run: go vet ./...
+        working-directory: tools/goproxy
+      - name: Lint proxy transport
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        working-directory: tools/goproxy
+        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...
+      - name: Check proxy dependencies
+        if: matrix.platform == 'linux' && matrix.arch == 'x64'
+        working-directory: tools/goproxy
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
       - run: npm test
       - run: npm run test:protocol
+        env:
+          FLUXY_PROXY_RACE: ${{ matrix.platform == 'win32' && matrix.arch == 'arm64' && '0' || '1' }}
+          GORACE: halt_on_error=1
       - run: npm run build
       # The upstream Intel Electron development app is unsigned. The helper's
       # native caller authentication must be exercised against the signed package.
