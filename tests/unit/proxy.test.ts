@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import http from 'node:http'
 import { spawn } from 'node:child_process'
@@ -110,6 +112,41 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true })
 })
 describe('real proxy traffic', () => {
+    it('captures HTTP through the local SOCKS5 endpoint and closes it on stop', async () => {
+        await engine.stop()
+        const socksPort = port
+        store.settings.captureMode = 'proxy'
+        await engine.start()
+        const { stdout } = await promisify(execFile)('curl', [
+            '--silent',
+            '--show-error',
+            '--max-time',
+            '8',
+            '--noproxy',
+            '',
+            '--socks5-hostname',
+            `127.0.0.1:${socksPort}`,
+            `http://127.0.0.1:${originPort}/via-socks`
+        ])
+        expect(stdout).toContain('/via-socks')
+        expect((await request('/same-port-http')).status).toBe(200)
+        await waitFor(() =>
+            [...engine.transactions.values()].some(
+                (t) => t.url.includes('/via-socks') && t.state === 'completed'
+            )
+        )
+        await engine.stop()
+        await expect(
+            new Promise<void>((resolve, reject) => {
+                const socket = net.connect(socksPort, '127.0.0.1')
+                socket.once('connect', () => {
+                    socket.destroy()
+                    resolve()
+                })
+                socket.once('error', reject)
+            })
+        ).rejects.toThrow('ECONNREFUSED')
+    })
     it('does not generate background update traffic while idle', async () => {
         // Upstream starts its registry version check one second after loading.
         // Embedded Fluxy must not capture its own maintenance requests.
@@ -446,21 +483,42 @@ describe('real proxy traffic', () => {
         expect(await readFile(engine.certificatePath, 'utf8')).toBe(cert)
         expect((await request()).status).toBe(200)
     })
-    it('exports a working CA for HTTPS MITM handshakes', async () => {
-        const socket = net.connect(port, '127.0.0.1')
-        await once(socket, 'connect')
-        socket.write(`CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n`)
-        await once(socket, 'data')
-        const secure = tls.connect({
-            socket,
-            servername: 'example.com',
-            ca: await readFile(engine.certificatePath)
-        })
-        await once(secure, 'secureConnect')
-        expect(secure.authorized).toBe(true)
-        expect(secure.getPeerCertificate().subject.CN).toBe('example.com')
-        secure.destroy()
-    })
+    it.each(['HTTP CONNECT', 'SOCKS5'])(
+        'exports a working CA for HTTPS MITM through %s on the shared port',
+        async (protocol) => {
+            const socket = net.connect(port, '127.0.0.1')
+            await once(socket, 'connect')
+            if (protocol === 'SOCKS5') {
+                // Fragment the greeting to verify that protocol detection retains bytes.
+                socket.write(Buffer.from([5]))
+                await new Promise((resolve) => setTimeout(resolve, 10))
+                socket.write(Buffer.from([1, 0]))
+                const [greeting] = await once(socket, 'data')
+                expect(greeting).toEqual(Buffer.from([5, 0]))
+                socket.write(
+                    Buffer.concat([
+                        Buffer.from([5, 1, 0, 3, 11]),
+                        Buffer.from('example.com'),
+                        Buffer.from([1, 187])
+                    ])
+                )
+                const [reply] = await once(socket, 'data')
+                expect(reply[1]).toBe(0)
+            } else {
+                socket.write(`CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n`)
+                await once(socket, 'data')
+            }
+            const secure = tls.connect({
+                socket,
+                servername: 'example.com',
+                ca: await readFile(engine.certificatePath)
+            })
+            await once(secure, 'secureConnect')
+            expect(secure.authorized).toBe(true)
+            expect(secure.getPeerCertificate().subject.CN).toBe('example.com')
+            secure.destroy()
+        }
+    )
     it('decrypts HTTPS and authenticates upstream TLS with the configured client certificate', async () => {
         const root = forge.pki.certificateFromPem(await readFile(engine.certificatePath, 'utf8'))
         const keyPEM = await readFile(join(directory, 'certificates/keys/ca.private.key'), 'utf8')

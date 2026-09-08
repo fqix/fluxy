@@ -453,7 +453,12 @@ export class Proxy {
             if (message.type === 'ready') finish()
             else void this.message(message).catch((error) => this.fail(message.id, error))
         })
-        this.send({ type: 'start', port: options.port, host: options.host, certDir })
+        this.send({
+            type: 'start',
+            port: options.port,
+            host: options.host,
+            certDir
+        })
     }
     async close() {
         const child = this.child

@@ -97,3 +97,5 @@ Original Fluxy contributions use the [MIT License](LICENSE). Third-party and
 Rockxy-derived material retain their original licenses; this change does not
 relicense them. See [copyright and scope](COPYRIGHT.md) and
 [third-party notices](THIRD_PARTY_NOTICES.md).
+
+The welcome wizard also offers a **Socks Proxy** tab beside TUN capture. Enable it to open the shared HTTP/HTTPS/SOCKS5 TCP endpoint (default `127.0.0.1:6060`) and configure that address in your client application. HTTP and HTTPS requests enter the same inspector; HTTPS decryption requires trusting Fluxy’s CA. This does not change the system proxy. UDP relay is not supported. The listener automatically detects HTTP or SOCKS5 and stops with capture. There is no separate SOCKS5 port.

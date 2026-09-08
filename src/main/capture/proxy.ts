@@ -569,6 +569,7 @@ export class ProxyEngine {
             proxy.httpServer?.on('connection', (socket) => this.track(socket))
             this.running = true
             this.log(`Proxy listening on ${host}:${this.store.settings.port}`)
+            this.log(`HTTP/HTTPS and SOCKS5 share ${host}:${this.store.settings.port}`)
             this.emit({ type: 'state' })
         } catch (error) {
             if (proxy.httpServer) await proxy.close()

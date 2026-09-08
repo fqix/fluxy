@@ -2,6 +2,7 @@ import { createRequire } from 'node:module'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import https from 'node:https'
+import { enableMixedProxy } from './mixed-proxy'
 import { observeTimings } from '../../src/main/capture/timing'
 import { StreamChannel } from '../../src/main/capture/whistle-ipc'
 
@@ -321,6 +322,12 @@ process.on('message', (message: any) => {
                 )
             }
             sockets(proxy)
+            enableMixedProxy(
+                proxy.server,
+                requireRuntime('sockx'),
+                message.port,
+                config.CLIENT_INFO_HEADER
+            )
             send({ type: 'ready' })
         }
     )
