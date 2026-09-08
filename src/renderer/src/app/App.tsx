@@ -542,6 +542,7 @@ export function App() {
         localStorage.setItem('fluxy-inspector-height', JSON.stringify(inspectorHeight))
     }, [sidebarWidth, inspectorHeight])
     const choose = (t: Transaction, e: React.MouseEvent) => {
+        setInspector(true)
         if (e.shiftKey && workspace.selected.length) {
             const first = filtered.findIndex((v) => v.id === workspace.selected[0]),
                 last = filtered.findIndex((v) => v.id === t.id)
@@ -908,6 +909,7 @@ export function App() {
                 const index = command === 'first-request' ? 0 : filtered.length - 1
                 if (filtered[index]) {
                     setAutoSelect(false)
+                    setInspector(true)
                     patch({ selected: [filtered[index].id] })
                     table.current?.scrollTo({ top: index * 26 })
                 }
@@ -1572,6 +1574,7 @@ export function App() {
                                     index + (e.key === 'ArrowDown' ? 1 : -1)
                                 )
                             )
+                            setInspector(true)
                             patch({ selected: [filtered[next].id] })
                             const offset = next * 26
                             if (
@@ -1660,6 +1663,7 @@ export function App() {
                                         }}
                                         onContextMenu={(e) => {
                                             e.preventDefault()
+                                            setInspector(true)
                                             patch({ selected: [t.id] })
                                             setContextMenu({
                                                 x: Math.min(e.clientX, window.innerWidth - 210),
