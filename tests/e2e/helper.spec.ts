@@ -1,7 +1,9 @@
+import { createServer, type AddressInfo } from 'node:net'
+import { once } from 'node:events'
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdtemp, mkdir, rm, symlink, readFile, access } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, symlink, readFile, access, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -15,6 +17,16 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
     const data = join(directory, 'data'),
         root = join(directory, 'server')
     await mkdir(root)
+    const listener = createServer().listen(0, '127.0.0.1')
+    await once(listener, 'listening')
+    const port = (listener.address() as AddressInfo).port
+    await new Promise<void>((resolve) => listener.close(() => resolve()))
+    await mkdir(data, { recursive: true })
+    await writeFile(
+        join(data, 'preferences.json'),
+        JSON.stringify({ settings: { port }, rules: [] })
+    )
+
     const binary = join(directory, 'helper-test')
     await promisify(execFile)(
         process.env.FLUXY_GO || 'go',

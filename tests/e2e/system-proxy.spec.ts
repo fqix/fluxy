@@ -1,6 +1,8 @@
+import { createServer, type AddressInfo } from 'node:net'
+import { once } from 'node:events'
 import { test, expect, _electron as electron } from '@playwright/test'
 import { createRequire } from 'node:module'
-import { mkdtemp, readFile, writeFile, rm, access } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile, rm, access, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
@@ -14,6 +16,16 @@ test('HTTP capture automatically manages system proxy, rolls back errors and per
     const report = join(directory, 'system.json'),
         bootstrap = join(directory, 'bootstrap.cjs')
     const data = join(directory, 'data')
+    const listener = createServer().listen(0, '127.0.0.1')
+    await once(listener, 'listening')
+    const port = (listener.address() as AddressInfo).port
+    await new Promise<void>((resolve) => listener.close(() => resolve()))
+    await mkdir(data, { recursive: true })
+    await writeFile(
+        join(data, 'preferences.json'),
+        JSON.stringify({ settings: { port }, rules: [] })
+    )
+
     const electronPath = createRequire(join(process.cwd(), 'package.json'))('electron') as string
     const resources = process.env.FLUXY_TEST_EXECUTABLE
         ? resolve(dirname(process.env.FLUXY_TEST_EXECUTABLE), '..', 'Resources')
