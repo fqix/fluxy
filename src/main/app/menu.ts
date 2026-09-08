@@ -392,33 +392,6 @@ export function buildMenuTemplate(
             submenu: [
                 item('Install Certificate on This Mac…', 'Certificates'),
                 separator,
-                {
-                    label: 'Install Certificate on iOS',
-                    submenu: [
-                        item('iOS Simulator…', 'setup:iOS Simulator'),
-                        item('Physical iPhone or iPad…', 'setup:iPhone or iPad')
-                    ]
-                },
-                {
-                    label: 'Install Certificate on Android',
-                    submenu: [
-                        item('Android Emulator…', 'setup:Android Emulator'),
-                        item('Android Device…', 'setup:Android Device')
-                    ]
-                },
-                separator,
-                item('Install Certificate on Java VMs…', 'setup:Java'),
-                {
-                    label: 'Install Certificate on Developments',
-                    submenu: [
-                        item('Flutter…', 'setup:Flutter'),
-                        item('React Native…', 'setup:React Native'),
-                        item('Electron…', 'setup:Electron'),
-                        item('Next.js…', 'setup:Next.js')
-                    ]
-                },
-                item('Install Certificate on Firefox Browsers…', 'setup:Firefox'),
-                separator,
                 item('Add Custom Certificates…', 'Custom Certificates'),
                 separator,
                 {
