@@ -25,9 +25,38 @@ test('first-run setup reads real status, handles cancellation and persists expli
         let page = await app.firstWindow()
         let welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
         await expect(welcome).toBeVisible()
-        await expect(welcome.getByRole('status')).toHaveText('0 of 4 complete')
-        await expect(welcome.getByRole('listitem')).toHaveCount(4)
-        await expect(welcome.getByRole('button', { name: 'Trust', exact: true })).toBeDisabled()
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
+        await expect(welcome.getByRole('listitem')).toHaveCount(2)
+        await expect(welcome.getByRole('listitem').first()).toContainText(
+            'Helper & Certificate Setup'
+        )
+        await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
+        await expect(
+            welcome.getByRole('button', { name: 'Save Domains', exact: true })
+        ).toHaveCount(0)
+        await welcome
+            .getByRole('textbox', { name: 'Capture domains', exact: true })
+            .fill('example.com')
+        // Editing alone does not save: Enable owns saving and starting capture.
+        expect(
+            (await page.evaluate(() => window.fluxy.snapshot())).settings.tun.captureDomains
+        ).toEqual([])
+        await welcome.getByRole('tab', { name: 'Socks Proxy', exact: true }).click()
+        await expect(
+            welcome.getByRole('tab', { name: 'Socks Proxy', exact: true })
+        ).toHaveAttribute('aria-selected', 'true')
+        await expect(welcome.getByRole('spinbutton', { name: 'SOCKS5 port' })).toHaveCount(0)
+        await expect(welcome.getByRole('tabpanel')).toContainText('127.0.0.1:6060')
+        await expect(
+            welcome.getByRole('textbox', { name: 'Capture domains', exact: true })
+        ).toHaveCount(0)
+        await welcome.getByRole('tab', { name: 'TUN Capture', exact: true }).click()
+        await expect(
+            welcome.getByRole('textbox', { name: 'Capture domains', exact: true })
+        ).toHaveValue('example.com')
+        await expect(welcome.getByRole('alert')).toHaveCount(0)
+        await mkdir('test-results', { recursive: true })
+        await page.screenshot({ path: 'test-results/fluxy-welcome-tun.png' })
         await expect(welcome.getByRole('button', { name: 'Get Started' })).toBeDisabled()
         await expect(access(join(directory, 'certificates/certs/ca.pem'))).rejects.toThrow()
         const initial = await page.evaluate(() => window.fluxy.snapshot())
@@ -35,7 +64,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
         expect(initial.running).toBe(false)
         expect(initial.systemProxy).toBe(false)
         await welcome.getByRole('checkbox', { name: 'Show on startup' }).uncheck()
-        await expect(welcome.getByRole('status')).toHaveText('0 of 4 complete')
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
         await welcome.getByRole('button', { name: 'Close', exact: true }).click()
         expect(
             (await page.evaluate(() => window.fluxy.snapshot())).settings.onboardingCompleted
@@ -45,20 +74,15 @@ test('first-run setup reads real status, handles cancellation and persists expli
         page = await app.firstWindow()
         welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
         await expect(welcome).toBeVisible() // Close is not completion, even with startup unchecked.
-        await expect(welcome.getByRole('status')).toHaveText('0 of 4 complete')
-        await welcome.getByRole('button', { name: 'Generate', exact: true }).click()
-        await expect(welcome.getByRole('status')).toHaveText('1 of 4 complete')
-        expect(await page.evaluate(() => window.fluxy.certificateStatus())).toEqual({
-            generated: true,
-            trusted: false,
-            supported: true
-        })
-        const certificate = await readFile(join(directory, 'certificates/certs/ca.pem'), 'utf8')
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
+        await expect(
+            welcome.getByRole('textbox', { name: 'Capture domains', exact: true })
+        ).toHaveValue('')
         await app.evaluate(() => {
             const cp = process.getBuiltinModule('node:child_process')!
             const original = cp.spawn
             cp.spawn = ((file: string, ...args: unknown[]) =>
-                file === '/usr/bin/osascript' ||
+                (args[0] as string[] | undefined)?.[0] === 'authorize-desktop' ||
                 file === '/usr/bin/pkexec' ||
                 (file === 'powershell.exe' && JSON.stringify(args).includes('-EncodedCommand'))
                     ? original(
@@ -68,9 +92,12 @@ test('first-run setup reads real status, handles cancellation and persists expli
                       )
                     : Reflect.apply(original, cp, [file, ...args])) as typeof cp.spawn
         })
-        await welcome.getByRole('button', { name: 'Trust', exact: true }).click()
-        await expect(welcome.getByRole('status')).toHaveText('1 of 4 complete')
+        await welcome.getByRole('button', { name: 'Set Up', exact: true }).click()
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
         expect((await page.evaluate(() => window.fluxy.certificateStatus())).trusted).toBe(false)
+        const certificate = await readFile(join(directory, 'certificates/certs/ca.pem'), 'utf8')
+        await expect(welcome.getByRole('alert')).toBeVisible()
+        await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
         await page.evaluate(async (port) => {
             const s = await window.fluxy.snapshot()
             await window.fluxy.settings({ ...s.settings, port, captureMode: 'proxy' })
@@ -100,7 +127,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
         })
         welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
         await expect(welcome).toBeVisible()
-        await expect(welcome.getByRole('status')).toHaveText('1 of 4 complete')
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
         expect(await readFile(join(directory, 'certificates/certs/ca.pem'), 'utf8')).toBe(
             certificate
         )

@@ -63,39 +63,53 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                     return Reflect.apply(originalDialog, _electron.dialog, args)
                 }) as typeof _electron.dialog.showMessageBox
                 cp.spawn = ((file: string, ...args: unknown[]) => {
-                    if (file !== '/usr/bin/osascript')
+                    if ((args[0] as string[] | undefined)?.[0] !== 'authorize-desktop')
                         return Reflect.apply(originalSpawn, cp, [file, ...args])
                     state.helperAuthCount++
-                    if (JSON.stringify(args).includes('uninstall stopped')) {
-                        if (state.uninstallAuthCanceled)
-                            return originalSpawn('/bin/sh', [
-                                '-c',
-                                'echo "Uninstall authorization canceled" >&2; exit 1'
-                            ])
-                        // Only terminate this test's rootless helper. The real
-                        // launchd job, privileged paths and trust store are untouched.
-                        const pid = state.testHelperPID ?? paths.helperPID
-                        if (pid) process.kill(pid, 'SIGTERM')
-                        fs.rmSync(paths.root + '/pairing.json', { force: true })
-                        return originalSpawn('/bin/sleep', ['1.2'])
-                    }
-                    const stage = fs
-                        .readdirSync(paths.data)
-                        .find((name) => name.startsWith('helper-install-'))!
-                    fs.copyFileSync(
-                        paths.data + '/' + stage + '/pairing.json',
-                        paths.root + '/pairing.json'
-                    )
-                    const worker = originalSpawn(paths.binary, [], {
-                        env: {
-                            ...process.env,
-                            FLUXY_HELPER_TEST_ROOT: paths.root,
-                            FLUXY_HELPER_TEST_PORT: '18003'
-                        },
-                        stdio: 'ignore'
+                    const { PassThrough } = process.getBuiltinModule('node:stream')!
+                    const { EventEmitter } = process.getBuiltinModule('node:events')!
+                    const worker = Object.assign(new EventEmitter(), {
+                        stdin: new PassThrough(),
+                        stdout: new PassThrough(),
+                        stderr: new PassThrough()
                     })
-                    state.testHelperPID = worker.pid
-                    return originalSpawn('/bin/sleep', ['0.3'])
+                    let input = ''
+                    worker.stdin.on('data', (chunk) => {
+                        input += chunk.toString()
+                    })
+                    worker.stdin.on('finish', () => {
+                        const request = JSON.parse(input) as { command: string }
+                        if (request.command.includes('uninstall stopped')) {
+                            if (state.uninstallAuthCanceled) {
+                                worker.stderr.write('Uninstall authorization canceled')
+                                setTimeout(() => worker.emit('close', 1), 10)
+                                return
+                            }
+                            const pid = state.testHelperPID ?? paths.helperPID
+                            if (pid) process.kill(pid, 'SIGTERM')
+                            fs.rmSync(paths.root + '/pairing.json', { force: true })
+                            setTimeout(() => worker.emit('close', 0), 1200)
+                            return
+                        }
+                        const stage = fs
+                            .readdirSync(paths.data)
+                            .find((name) => name.startsWith('helper-install-'))!
+                        fs.copyFileSync(
+                            paths.data + '/' + stage + '/pairing.json',
+                            paths.root + '/pairing.json'
+                        )
+                        const daemon = originalSpawn(paths.binary, [], {
+                            env: {
+                                ...process.env,
+                                FLUXY_HELPER_TEST_ROOT: paths.root,
+                                FLUXY_HELPER_TEST_PORT: '18003'
+                            },
+                            stdio: 'ignore'
+                        })
+                        state.testHelperPID = daemon.pid
+                        setTimeout(() => worker.emit('close', 0), 300)
+                    })
+                    return worker
                 }) as typeof cp.spawn
             },
             { root, data, binary, helperPID }
@@ -106,24 +120,27 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         await patch(app)
         let page = await app.firstWindow()
         let welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
-        await expect(welcome.getByRole('status')).toHaveText('0 of 4 complete')
-        await welcome.getByRole('button', { name: 'Install Helper', exact: true }).click()
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
+        await welcome.getByRole('button', { name: 'Set Up', exact: true }).click()
         // Installing copies and verifies the bundled binaries before starting the helper.
         // Allow bounded startup time for the real signed application and helper.
-        await expect(welcome.getByRole('status')).toHaveText('1 of 4 complete', {
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete', {
             timeout: 20000
         })
         expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
         helperPID = await app.evaluate(
             () => (process as typeof process & { testHelperPID?: number }).testHelperPID
         )
-        await welcome.getByRole('button', { name: 'Generate', exact: true }).click()
-        await expect(welcome.getByRole('status')).toHaveText('2 of 4 complete')
+        // The fixture installs only the rootless helper, never system trust.
+        await expect(welcome.getByRole('alert')).toContainText(
+            'certificate trust verification failed'
+        )
+        expect((await page.evaluate(() => window.fluxy.certificateStatus())).generated).toBe(true)
         for (let i = 0; i < 2; i++) {
-            await welcome.getByRole('button', { name: 'Trust', exact: true }).click()
-            await expect(welcome.getByRole('alert')).toContainText('CA mutations are disabled')
+            await expect(page.evaluate(() => window.fluxy.trustCertificate())).rejects.toThrow(
+                'CA mutations are disabled'
+            )
         }
-        await page.evaluate(() => window.fluxy.installHelper()) // Ready is idempotent.
         expect(
             await app.evaluate(
                 () => (process as typeof process & { helperAuthCount: number }).helperAuthCount
@@ -137,7 +154,7 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
         await expect(
             page.getByRole('dialog', { name: 'Welcome to Fluxy' }).getByRole('status')
-        ).toHaveText('2 of 4 complete')
+        ).toHaveText('0 of 2 complete')
         expect(
             await app.evaluate(
                 () => (process as typeof process & { helperAuthCount: number }).helperAuthCount
@@ -198,7 +215,7 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         expect(await readFile(join(data, 'certificates/certs/ca.pem'), 'utf8')).toBe(ca)
         await expect(uninstall).toBeDisabled()
         expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(2)
-        await page.getByRole('button', { name: 'Install Helper', exact: true }).click()
+        await page.getByRole('button', { name: 'Set Up Helper & CA', exact: true }).click()
         await expect
             .poll(async () => (await page.evaluate(() => window.fluxy.snapshot())).helper.state, {
                 timeout: 20000

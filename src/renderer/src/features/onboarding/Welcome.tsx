@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Check, LockKeyhole, Network, ShieldCheck, Wrench } from 'lucide-react'
+import { Check, Network, Wrench } from 'lucide-react'
 import type { CertificateStatus, Snapshot } from '@shared/contracts/model'
 import icon from '@assets/icon.png'
 
@@ -17,6 +18,12 @@ export function Welcome({
     const [busy, setBusy] = useState('Checking system…')
     const [error, setError] = useState('')
     const [manual, setManual] = useState(false)
+    const isTun = snapshot.settings.captureMode === 'tun'
+    const helperReady = snapshot.helper.state === 'ready'
+    const tunActive = ['starting', 'running', 'stopping'].includes(snapshot.tun.state)
+    const savedDomains = snapshot.settings.tun.captureDomains.join('\n')
+    const [domains, setDomains] = useState(savedDomains)
+    useEffect(() => setDomains(savedDomains), [savedDomains])
     const [showOnLaunch, setShowOnLaunch] = useState(snapshot.settings.showWelcomeOnLaunch)
     useEffect(
         () => setShowOnLaunch(snapshot.settings.showWelcomeOnLaunch),
@@ -48,15 +55,9 @@ export function Welcome({
         ref.current?.focus()
         return () => previous?.focus()
     }, [])
+    const setupReady = helperReady && !!certificate?.trusted
     const completed =
-        Number(certificate?.generated ?? false) +
-        Number(certificate?.trusted ?? false) +
-        Number(snapshot.helper.state === 'ready') +
-        Number(
-            snapshot.settings.captureMode === 'tun'
-                ? snapshot.tun.state === 'running'
-                : snapshot.systemProxy
-        )
+        Number(setupReady) + Number(isTun ? snapshot.tun.state === 'running' : snapshot.running)
     const dismiss = () => {
         if (!busy) close()
     }
@@ -67,71 +68,77 @@ export function Welcome({
             if (openDeveloper) developerSetup()
             else close()
         })
+    const saveDomains = async () => {
+        const current = await window.fluxy.snapshot()
+        await window.fluxy.settings({
+            ...current.settings,
+            tun: {
+                ...current.settings.tun,
+                captureDomains: domains.split(/[\s,]+/).filter(Boolean)
+            }
+        })
+    }
     const rows = [
         {
-            title: 'Generate Root Certificate',
-            detail: "Create Fluxy's local certificate authority for HTTPS inspection.",
-            icon: LockKeyhole,
-            done: certificate?.generated,
-            label: certificate?.error ? 'Recheck Status' : 'Generate',
-            disabled: !certificate,
-            action: () =>
-                act('Generating certificate…', async () =>
-                    setCertificate(
-                        await (certificate?.error
-                            ? window.fluxy.certificateStatus()
-                            : window.fluxy.generateCertificate())
-                    )
-                )
-        },
-        {
-            title: 'Trust Root Certificate',
-            detail: 'Install and trust Fluxy’s CA in the System keychain. Installs Helper Tool first if needed, using one administrator authorization.',
-            icon: ShieldCheck,
-            done: certificate?.trusted,
+            title: 'Helper & Certificate Setup',
+            detail: 'Complete Helper installation and certificate trust through macOS native authorization. First-time setup may request authorization twice. Completed steps are reused when you retry.',
+            icon: Wrench,
+            done: setupReady,
+            error: certificate?.error,
             label: certificate?.error
                 ? 'Recheck Status'
-                : certificate?.supported
-                  ? 'Trust'
-                  : 'Export',
-            disabled: !certificate?.generated,
+                : helperReady
+                  ? 'Complete Setup'
+                  : snapshot.helper.state === 'outdated'
+                    ? 'Update Setup'
+                    : 'Set Up',
+            disabled:
+                !certificate ||
+                tunActive ||
+                snapshot.running ||
+                ['unsupported', 'installing', 'uninstalling'].includes(snapshot.helper.state),
             action: () =>
-                act('Checking certificate trust…', async () => {
+                act('Setting up Helper and certificate…', async () => {
                     if (certificate?.error) {
                         setCertificate(await window.fluxy.certificateStatus())
                         return
                     }
-                    if (certificate?.supported) await window.fluxy.trustCertificate()
-                    else await window.fluxy.exportCertificate()
-                    setCertificate(await window.fluxy.certificateStatus())
+                    try {
+                        await window.fluxy.installHelper()
+                    } finally {
+                        setCertificate(await window.fluxy.certificateStatus())
+                    }
                 })
         },
         {
-            title: 'Install Helper Tool',
-            detail: 'Authorize installation once. TUN and system CA installation then reuse the helper without additional administrator prompts.',
-            icon: Wrench,
-            done: snapshot.helper.state === 'ready',
-            label: snapshot.helper.state === 'outdated' ? 'Update Helper' : 'Install Helper',
-            disabled: ['unsupported', 'installing', 'uninstalling'].includes(snapshot.helper.state),
-            action: () => act('Installing Helper Tool…', () => window.fluxy.installHelper())
-        },
-        {
-            title:
-                snapshot.settings.captureMode === 'tun'
-                    ? 'Enable TUN Capture'
-                    : 'Enable System Proxy',
-            detail: 'Route system network traffic through Fluxy. Capture settings are restored when capture stops.',
+            capture: true,
+            title: isTun ? 'TUN Capture' : 'Socks Proxy',
+            detail: isTun
+                ? 'Complete setup before starting TUN. Starting capture does not request installation authorization. On macOS, Fluxy keeps TUN enabled alongside Mihomo / sing-box using its own Fake IP DNS. Stopping TUN removes Fluxy’s split DNS and routes, restoring the previous DNS behavior.'
+                : 'Connect your app to Fluxy’s local SOCKS5 endpoint to capture HTTP and HTTPS traffic. HTTPS inspection requires trusting the root certificate. Supports TCP; UDP relay is not available.',
             icon: Network,
             done:
                 snapshot.settings.captureMode === 'tun'
                     ? snapshot.tun.state === 'running'
-                    : snapshot.systemProxy,
+                    : snapshot.running,
             label: 'Enable',
-            disabled: !certificate?.supported,
+            disabled: isTun
+                ? !setupReady || tunActive || snapshot.running
+                : !certificate || snapshot.running || tunActive,
             action: () =>
-                act('Enabling system proxy…', async () => {
-                    if (snapshot.settings.captureMode === 'tun') await window.fluxy.start()
-                    else await window.fluxy.systemProxy(true)
+                act(isTun ? 'Starting TUN…' : 'Starting SOCKS5 proxy…', async () => {
+                    if (isTun) {
+                        await saveDomains()
+                        await window.fluxy.start()
+                    } else {
+                        const current = await window.fluxy.snapshot()
+                        await window.fluxy.settings({
+                            ...current.settings,
+                            captureMode: 'proxy',
+                            autoSystemProxy: false
+                        })
+                        await window.fluxy.start()
+                    }
                     setCertificate(await window.fluxy.certificateStatus())
                 })
         }
@@ -153,7 +160,7 @@ export function Welcome({
                     if (e.key !== 'Tab') return
                     const items = Array.from(
                         ref.current?.querySelectorAll<HTMLElement>(
-                            'button:not(:disabled), input:not(:disabled)'
+                            'button:not(:disabled), input:not(:disabled), textarea:not(:disabled)'
                         ) ?? []
                     )
                     const index = items.indexOf(document.activeElement as HTMLElement)
@@ -173,14 +180,14 @@ export function Welcome({
                             <h1 id="welcome-title">Welcome to Fluxy</h1>
                             <p>
                                 {snapshot.settings.onboardingCompleted
-                                    ? 'Review the four setup steps before continuing.'
-                                    : 'Complete these four steps to prepare network debugging.'}
+                                    ? 'Review the two setup steps before continuing.'
+                                    : 'Complete these two steps to prepare network debugging.'}
                             </p>
                         </div>
                     </div>
                     <div className="welcome-progress">
-                        <progress aria-label="Setup progress" max={4} value={completed} />
-                        <span role="status">{busy || `${completed} of 4 complete`}</span>
+                        <progress aria-label="Setup progress" max={2} value={completed} />
+                        <span role="status">{busy || `${completed} of 2 complete`}</span>
                     </div>
                 </header>
                 <div className="welcome-content">
@@ -194,15 +201,128 @@ export function Welcome({
                                     {row.done ? <Check size={15} /> : <row.icon size={15} />}
                                 </span>
                                 <div className="welcome-step-copy">
-                                    <h2>{row.title}</h2>
-                                    <p>{row.detail}</p>
-                                    {index === 0 && certificate?.error && (
+                                    {row.capture ? (
+                                        <div
+                                            role="tablist"
+                                            aria-label="Capture mode"
+                                            className="welcome-capture-tabs"
+                                            onKeyDown={(e) => {
+                                                if (
+                                                    ![
+                                                        'ArrowLeft',
+                                                        'ArrowRight',
+                                                        'Home',
+                                                        'End'
+                                                    ].includes(e.key)
+                                                )
+                                                    return
+                                                const tabs = Array.from(
+                                                    e.currentTarget.querySelectorAll<HTMLButtonElement>(
+                                                        '[role="tab"]:not(:disabled)'
+                                                    )
+                                                )
+                                                if (!tabs.length) return
+                                                e.preventDefault()
+                                                const next =
+                                                    e.key === 'Home'
+                                                        ? tabs[0]
+                                                        : e.key === 'End'
+                                                          ? tabs.at(-1)!
+                                                          : (tabs.find(
+                                                                (tab) =>
+                                                                    tab !== document.activeElement
+                                                            ) ?? tabs[0])
+                                                next.focus()
+                                                next.click()
+                                            }}
+                                        >
+                                            {(['tun', 'proxy'] as const).map((mode) => (
+                                                <Button
+                                                    key={mode}
+                                                    id={`welcome-${mode}-tab`}
+                                                    role="tab"
+                                                    aria-selected={isTun === (mode === 'tun')}
+                                                    aria-controls="welcome-capture-panel"
+                                                    disabled={
+                                                        !!busy ||
+                                                        tunActive ||
+                                                        snapshot.running ||
+                                                        snapshot.systemProxy
+                                                    }
+                                                    onClick={() =>
+                                                        void act(
+                                                            'Selecting capture mode…',
+                                                            async () => {
+                                                                const current =
+                                                                    await window.fluxy.snapshot()
+                                                                await window.fluxy.settings({
+                                                                    ...current.settings,
+                                                                    captureMode: mode
+                                                                })
+                                                            }
+                                                        )
+                                                    }
+                                                >
+                                                    {mode === 'tun' ? 'TUN Capture' : 'Socks Proxy'}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <h2>{row.title}</h2>
+                                    )}
+                                    <div
+                                        role={row.capture ? 'tabpanel' : undefined}
+                                        id={row.capture ? 'welcome-capture-panel' : undefined}
+                                        aria-labelledby={
+                                            row.capture
+                                                ? `welcome-${isTun ? 'tun' : 'proxy'}-tab`
+                                                : undefined
+                                        }
+                                    >
+                                        <p>{row.detail}</p>
+                                        {row.capture && isTun && (
+                                            <div className="welcome-domains">
+                                                <label htmlFor="welcome-capture-domains">
+                                                    Capture domains
+                                                </label>
+                                                <Textarea
+                                                    id="welcome-capture-domains"
+                                                    aria-describedby="welcome-capture-domains-hint"
+                                                    rows={2}
+                                                    placeholder={'example.com\napi.example.org'}
+                                                    value={domains}
+                                                    disabled={
+                                                        !!busy || tunActive || snapshot.running
+                                                    }
+                                                    onChange={(e) => setDomains(e.target.value)}
+                                                />
+                                                <p id="welcome-capture-domains-hint">
+                                                    Optional, macOS only. One domain per line,
+                                                    including subdomains. Leave empty to capture all
+                                                    domains. Use automatic exit settings and leave
+                                                    route CIDRs empty in TUN settings. Enable saves
+                                                    these domains before starting.
+                                                </p>
+                                            </div>
+                                        )}
+                                        {row.capture && !isTun && (
+                                            <div className="welcome-domains">
+                                                <p>
+                                                    HTTP / HTTPS / SOCKS5 · 127.0.0.1:
+                                                    {snapshot.settings.port}. Configure this address
+                                                    in your app; system proxy settings are not
+                                                    changed.
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {row.error && (
                                         <p className="welcome-error" role="alert">
-                                            {certificate.error}
+                                            {row.error}
                                         </p>
                                     )}
                                 </div>
-                                {(!row.done || (index === 0 && certificate?.error)) && (
+                                {(!row.done || row.error) && (
                                     <Button
                                         disabled={!!busy || row.disabled}
                                         onClick={() => void row.action()}
@@ -256,7 +376,7 @@ export function Welcome({
                         <Button disabled={!!busy} onClick={dismiss}>
                             Close
                         </Button>
-                        {!manual && completed < 4 && (
+                        {!manual && completed < 2 && (
                             <Button disabled={!!busy} onClick={() => setManual(true)}>
                                 Use Manual Setup
                             </Button>
@@ -268,7 +388,7 @@ export function Welcome({
                         )}
                         <Button
                             className="primary"
-                            disabled={!!busy || (!manual && completed < 4)}
+                            disabled={!!busy || (!manual && completed < 2)}
                             onClick={() => finish(false)}
                         >
                             {manual ? 'Continue Manually' : 'Get Started'}
