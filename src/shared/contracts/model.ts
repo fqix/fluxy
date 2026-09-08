@@ -355,6 +355,7 @@ export interface CertificateStatus {
     error?: string
 }
 export interface FluxyAPI {
+    platform: string
     diffText(left: string, right: string): Promise<DiffResult>
     diffHistory(): Promise<DiffPair[]>
     diffRecord(left: string, right: string): Promise<DiffPair[]>

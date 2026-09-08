@@ -3,6 +3,7 @@ import type { FluxyAPI, AppEvent } from '../shared/contracts/model'
 const invoke = (channel: string, ...args: unknown[]) =>
     ipcRenderer.invoke(`fluxy:${channel}`, ...args)
 const api: FluxyAPI = {
+    platform: process.platform,
     importCustomCertificate: (input) => invoke('certificate:custom-import', input),
     deleteCustomCertificate: (id) => invoke('certificate:custom-delete', id),
     resetCertificates: () => invoke('certificate:reset'),

@@ -235,6 +235,39 @@ small {
 .titlebar-left button {
     padding: 4px;
 }
+.app:not([data-platform='darwin']) .titlebar {
+    height: 44px;
+    -webkit-app-region: no-drag;
+}
+.app:not([data-platform='darwin']) .titlebar-left {
+    padding: 0 10px 0 14px;
+    justify-content: space-between;
+}
+.toolbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+}
+.toolbar-brand img {
+    width: 22px;
+    height: 22px;
+}
+.app:not([data-platform='darwin']) .workspace-title {
+    min-width: 0;
+    flex-shrink: 1;
+}
+.app:not([data-platform='darwin']) .proxy-pill {
+    position: static;
+    transform: none;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.app:not([data-platform='darwin']) .window-actions {
+    margin-left: 12px;
+    flex-shrink: 0;
+}
 .workspace-title {
     font-size: 14px;
     font-weight: 600;

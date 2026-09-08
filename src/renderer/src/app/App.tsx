@@ -1077,17 +1077,31 @@ export function App() {
             </div>
         )
     return (
-        <div className="app" onClick={() => contextMenu && setContextMenu(undefined)}>
+        <div
+            className="app"
+            data-platform={window.fluxy.platform}
+            onClick={() => contextMenu && setContextMenu(undefined)}
+        >
             <div className="titlebar">
                 <div className="titlebar-left" style={{ width: sidebar ? sidebarWidth : 104 }}>
+                    {window.fluxy.platform !== 'darwin' && (
+                        <span className="toolbar-brand">
+                            <img src={icon} alt="" />
+                            {sidebar && <span>Fluxy</span>}
+                        </span>
+                    )}
                     <Button title="Toggle sidebar" onClick={() => setSidebar((v) => !v)}>
                         <PanelLeft size={18} />
                     </Button>
                 </div>
                 <strong className="workspace-title">
-                    {workspace.name === 'All Traffic'
-                        ? workspace.scope.replace(/^(domain|app):/, '')
-                        : workspace.name}
+                    {workspace.name !== 'All Traffic'
+                        ? workspace.name
+                        : workspace.scope.startsWith('app:')
+                          ? `App: ${workspace.scope === 'app:Unknown' ? 'Unidentified' : workspace.scope.slice(4)}`
+                          : workspace.scope.startsWith('domain:')
+                            ? `Domain: ${workspace.scope.slice(7)}`
+                            : workspace.scope}
                 </strong>
                 <Button
                     className="proxy-pill"
@@ -1190,7 +1204,7 @@ export function App() {
                                                 )
                                                 .map(([c, n]) =>
                                                     nav(
-                                                        c,
+                                                        c === 'Unknown' ? 'Unidentified app' : c,
                                                         `app:${c}`,
                                                         <span
                                                             className={`app-icon ${c === 'Google Chrome' ? 'chrome' : ''}`}

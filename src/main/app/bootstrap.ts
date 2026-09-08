@@ -904,8 +904,9 @@ async function createWindow() {
         minHeight: 640,
         title: 'Fluxy',
         backgroundColor: nativeTheme.shouldUseDarkColors ? '#202024' : '#ffffff',
-        titleBarStyle: 'hiddenInset',
-        trafficLightPosition: { x: 18, y: 20 },
+        ...(process.platform === 'darwin'
+            ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 20 } }
+            : {}),
         icon: join(__dirname, '../../resources/icon.png'),
         webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
