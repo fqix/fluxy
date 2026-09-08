@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fromHAR, toHAR } from '../../src/shared/traffic/har'
 import { contentKind, transactionSchema } from '../../src/shared/contracts/model'
-import { protocolPanels } from '../../src/shared/traffic/protocols'
+import { grpcWebTrailers, protocolPanels } from '../../src/shared/traffic/protocols'
 import { decodeProtobuf } from '../../src/main/protocols/protobuf'
 
 const fixture = JSON.parse(
@@ -135,5 +135,42 @@ describe('real HAR protocol regressions', () => {
         expect(() => decodeProtobuf(schema, 'Reply', body.subarray(0, -1), true, '', true)).toThrow(
             'Truncated'
         )
+    })
+    it('reads gRPC-Web grpc-status from the trailer frame instead of the header block', () => {
+        const message = Buffer.from([0, 0, 0, 0, 4, 10, 2, 111, 107])
+        const trailer = Buffer.from('grpc-status: 5\r\ngrpc-message: Not%20Found\r\n')
+        const head = Buffer.alloc(5)
+        head[0] = 128
+        head.writeUInt32BE(trailer.length, 1)
+        const wire = Buffer.concat([message, head, trailer])
+        const base = {
+            ...fromHAR(fixture)[1],
+            responseHeaders: { 'content-type': 'application/grpc-web+proto' },
+            responseBody: '',
+            responseBase64: wire.toString('base64')
+        }
+        expect(grpcWebTrailers(base)).toMatchObject({
+            'grpc-status': '5',
+            'grpc-message': 'Not%20Found'
+        })
+        const panel = protocolPanels(base).find((p) => p.title === 'gRPC')
+        expect(panel?.fields['gRPC status']).toBe('5')
+        expect(panel?.fields.Message).toBe('Not Found')
+
+        // grpc-web-text base64-encodes the frame stream itself.
+        const text = {
+            ...base,
+            responseHeaders: { 'content-type': 'application/grpc-web-text' },
+            responseBase64: Buffer.from(wire.toString('base64')).toString('base64')
+        }
+        expect(grpcWebTrailers(text)['grpc-status']).toBe('5')
+
+        // Plain gRPC keeps using the header block, and malformed bodies stay silent.
+        expect(
+            grpcWebTrailers({ ...base, responseHeaders: { 'content-type': 'application/grpc' } })
+        ).toEqual({})
+        expect(
+            grpcWebTrailers({ ...base, responseBase64: message.subarray(0, 3).toString('base64') })
+        ).toEqual({})
     })
 })

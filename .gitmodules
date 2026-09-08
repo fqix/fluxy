@@ -1,3 +1,6 @@
 [submodule "third_party/sing-box"]
 	path = third_party/sing-box
 	url = https://github.com/SagerNet/sing-box.git
+[submodule "third_party/whistle"]
+	path = third_party/whistle
+	url = https://github.com/avwo/whistle.git

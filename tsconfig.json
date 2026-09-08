@@ -17,5 +17,12 @@
       "@assets/*": ["resources/*"]
     }
   },
-  "include": ["src", "tests", "electron.vite.config.ts", "vitest.config.ts", "playwright.config.ts"]
+  "include": [
+    "src",
+    "tests",
+    "electron.vite.config.ts",
+    "vitest.config.ts",
+    "playwright.config.ts",
+    "tools/whistle/child.ts"
+  ]
 }

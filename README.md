@@ -35,7 +35,7 @@ Both scripts select the architecture and verify SHA-256. Matching packages and c
 ## Develop
 
 ```sh
-git submodule update --init third_party/sing-box
+git submodule update --init --recursive
 npm ci
 npm run dev
 ```
@@ -44,12 +44,14 @@ Use Node.js 22.12+ and npm. All builds need Python 3.10+ and Go for the transpor
 
 ## Features
 
-- HTTP/HTTPS capture, WebSocket inspection, system proxy integration and TUN capture on macOS, Linux and Windows.
+- HTTP/HTTPS, HTTP/2, gRPC/gRPCS streaming, SSE and WS/WSS inspection, system proxy integration and TUN capture on macOS, Linux and Windows.
 - Application attribution, advanced filtering, projects, sessions and HAR interchange.
 - Request/response breakpoints, mapping and header rules, network condition presets and bandwidth shaping.
 - Request/response/timing and text Diff, comparison history, pinning and export.
 - Certificate tools, request composition, scripting, Protobuf/gRPC inspection and MCP.
 - Automatic update checks/downloads with an explicit restart/install action. Production updates require signed published packages.
+
+Whistle runs in an isolated child process; Fluxy retains its rules, scripts, breakpoints and session model. The pinned source, patches and stream regression coverage are documented in [tools/whistle](tools/whistle/README.md).
 
 The AI assistant has been removed. See [feature coverage and limits](ELECTRON.md).
 
@@ -63,6 +65,9 @@ Fluxy's current TUN mode conflicts with Clash and sing-box. Before enabling Flux
 npm run typecheck
 npm run format:check
 npm test
+npm run test:protocol
+# Optional live go-httpbin / grpcbin checks:
+npm run test:protocol:public
 npm run test:e2e
 npm run package
 npm run dist
@@ -80,6 +85,7 @@ Tests use local servers and temporary storage. Real system proxy changes, certif
 | `src/shared`                             | [Shared modules](src/shared/README.md): contracts, traffic, workspace     |
 | `tools/helper`                           | Cross-platform Go privilege helper                                        |
 | `tools/sing-box`, `third_party/sing-box` | Pinned transport core and build tooling                                   |
+| `tools/whistle`, `third_party/whistle`   | Pinned Whistle proxy, isolated runtime and patches                        |
 | `tests`                                  | Unit, integration and Electron desktop tests                              |
 | `resources`                              | Fluxy icons and redistribution notices                                    |
 

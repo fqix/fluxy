@@ -2,7 +2,10 @@ import type { ClientRequest } from 'node:http'
 import type { TLSSocket } from 'node:tls'
 import { performance } from 'node:perf_hooks'
 import type { Transaction } from '../../shared/contracts/model'
-export function observeTimings(request: ClientRequest, t: Transaction) {
+export function observeTimings(
+    request: ClientRequest,
+    t: Pick<Transaction, 'timestamp' | 'timings'>
+) {
     const started = performance.now() - Math.max(0, Date.now() - t.timestamp)
     let assigned = performance.now(),
         lookup: number | undefined,

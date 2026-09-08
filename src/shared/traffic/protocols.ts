@@ -16,13 +16,62 @@ function parse(input: string): unknown {
         return undefined
     }
 }
+function bodyBytes(text: string, base64?: string): Uint8Array | undefined {
+    try {
+        return base64
+            ? Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+            : new TextEncoder().encode(text)
+    } catch {
+        return undefined
+    }
+}
+// gRPC-Web carries grpc-status/grpc-message in a trailing 0x80 frame rather than in
+// HTTP headers; only trailers-only responses put them in the header block.
+export function grpcWebTrailers(t: Transaction): Record<string, string> {
+    const type = t.responseHeaders['content-type'] ?? ''
+    if (!/^application\/grpc-web(?:[+;\s]|$|-?text(?:[+;\s]|$))/i.test(type)) return {}
+    let bytes = bodyBytes(t.responseBody, t.responseBase64)
+    if (!bytes) return {}
+    if (/^application\/grpc-web-?text/i.test(type)) {
+        // grpc-web-text base64-encodes the frame stream itself.
+        const inner = bodyBytes('', new TextDecoder().decode(bytes).replace(/\s+/g, ''))
+        if (!inner) return {}
+        bytes = inner
+    }
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    for (let offset = 0; offset + 5 <= bytes.length;) {
+        const flag = bytes[offset],
+            length = view.getUint32(offset + 1)
+        offset += 5
+        if (offset + length > bytes.length) break
+        if (flag === 0x80) {
+            const block = new TextDecoder().decode(bytes.subarray(offset, offset + length))
+            return Object.fromEntries(
+                block.split(/\r\n/).flatMap((line) => {
+                    const at = line.indexOf(':')
+                    return at > 0
+                        ? [
+                              [
+                                  line.slice(0, at).trim().toLowerCase(),
+                                  line.slice(at + 1).trim()
+                              ] as [string, string]
+                          ]
+                        : []
+                })
+            )
+        }
+        offset += length
+    }
+    return {}
+}
 export function protocolPanels(t: Transaction): ProtocolPanel[] {
     const request = object(parse(t.requestBody)),
         response = object(parse(t.responseBody))
     const panels: ProtocolPanel[] = []
     if (contentKind(t) === 'gRPC') {
         const parts = t.path.split('?')[0].split('/')
-        let message = t.responseHeaders['grpc-message'] ?? ''
+        const trailers = grpcWebTrailers(t)
+        let message = trailers['grpc-message'] ?? t.responseHeaders['grpc-message'] ?? ''
         try {
             message = decodeURIComponent(message)
         } catch {
@@ -34,7 +83,8 @@ export function protocolPanels(t: Transaction): ProtocolPanel[] {
                 Service: parts.at(-2) ?? '',
                 Method: parts.at(-1) ?? '',
                 'HTTP status': String(t.status ?? ''),
-                'gRPC status': t.responseHeaders['grpc-status'] ?? 'Not supplied',
+                'gRPC status':
+                    trailers['grpc-status'] ?? t.responseHeaders['grpc-status'] ?? 'Not supplied',
                 Message: message,
                 Encoding: t.responseHeaders['grpc-encoding'] ?? 'identity'
             },

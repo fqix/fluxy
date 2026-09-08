@@ -9,7 +9,7 @@ import {
 import { matchesBreakpoint } from '../rules/rule-match'
 import { ProcessResolver } from './process-resolver'
 import type { CustomCertificates } from '../certificates/custom-certificates'
-import { Proxy, type IContext } from 'http-mitm-proxy'
+import { Proxy, type IContext } from './whistle-transport'
 import http from 'node:http'
 import { isUtf8 } from 'node:buffer'
 import https from 'node:https'
@@ -18,7 +18,13 @@ import { Readable, type Duplex } from 'node:stream'
 import { randomUUID } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
-import { brotliDecompressSync, gunzipSync, inflateSync } from 'node:zlib'
+import {
+    brotliDecompressSync,
+    gunzipSync,
+    inflateRawSync,
+    inflateSync,
+    zstdDecompressSync
+} from 'node:zlib'
 import { ensureCertificate } from '../certificates/certificates'
 import { Store } from '../storage/store'
 import { upstreamAgent } from './upstream'
@@ -44,18 +50,33 @@ const headers = (input: http.IncomingHttpHeaders): Headers =>
             .filter(([, v]) => v !== undefined)
             .map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v.join('\n') : String(v)])
     )
-function decode(buffer: Buffer, encoding?: string) {
+export function decode(buffer: Buffer, encoding?: string) {
     try {
         const options = { maxOutputLength: BODY_LIMIT }
         if (encoding === 'gzip') return gunzipSync(buffer, options)
         if (encoding === 'br') return brotliDecompressSync(buffer, options)
-        if (encoding === 'deflate') return inflateSync(buffer, options)
+        // Chromium has advertised zstd since 123, so origins negotiate it against browsers.
+        if (encoding === 'zstd' && typeof zstdDecompressSync === 'function')
+            return zstdDecompressSync(buffer, options)
+        if (encoding === 'deflate') {
+            try {
+                return inflateSync(buffer, options)
+            } catch {
+                // Some origins send bare DEFLATE (RFC 1951) without the zlib wrapper.
+                return inflateRawSync(buffer, options)
+            }
+        }
     } catch {
         /* A partial compressed body stays available as raw bytes. */
     }
     return buffer
 }
+function isStreaming(source: http.IncomingMessage) {
+    return /^(application\/grpc|text\/event-stream)/i.test(source.headers['content-type'] ?? '')
+}
 async function bufferMessage(source: http.IncomingMessage) {
+    if (isStreaming(source)) return { body: undefined, replay: (_body?: Buffer) => source }
+
     const chunks: Buffer[] = []
     let size = 0,
         oversized = false
@@ -69,25 +90,29 @@ async function bufferMessage(source: http.IncomingMessage) {
         }
     }
     const replay = (body?: Buffer) =>
-        Object.assign(
-            body
-                ? Readable.from([body])
-                : Readable.from(
-                      (async function* () {
-                          for (const chunk of chunks) yield chunk
-                          if (oversized) for await (const chunk of source) yield chunk
-                      })()
-                  ),
-            {
-                headers: { ...source.headers },
-                rawHeaders: [...(source.rawHeaders ?? [])],
-                method: source.method,
-                url: source.url,
-                socket: source.socket,
-                httpVersion: source.httpVersion,
-                statusCode: source.statusCode,
-                statusMessage: source.statusMessage
-            }
+        Object.defineProperty(
+            Object.assign(
+                body
+                    ? Readable.from([body])
+                    : Readable.from(
+                          (async function* () {
+                              for (const chunk of chunks) yield chunk
+                              if (oversized) for await (const chunk of source) yield chunk
+                          })()
+                      ),
+                {
+                    headers: { ...source.headers },
+                    rawHeaders: [...(source.rawHeaders ?? [])],
+                    method: source.method,
+                    url: source.url,
+                    socket: source.socket,
+                    httpVersion: source.httpVersion,
+                    statusCode: source.statusCode,
+                    statusMessage: source.statusMessage
+                }
+            ),
+            'trailers',
+            { get: () => source.trailers }
         ) as http.IncomingMessage
     return { body: oversized ? undefined : Buffer.concat(chunks), replay }
 }
@@ -332,33 +357,26 @@ export class ProxyEngine {
             this.upstreamHTTPSAgent,
             () => this.transportEgress
         )
-        const proxy = new Proxy()
+        const proxy = new Proxy({
+            certificate: async (host) =>
+                this.customCertificates?.hasServer(host)
+                    ? this.customCertificates.server(host)
+                    : undefined,
+            root: () => this.customCertificates?.rootIdentity(),
+            route: (url) => {
+                if (this.transportEgress) return this.transportEgress
+                const host = new URL(url).hostname
+                const upstream = this.store.settings.upstream
+                return !this.bypassed(host) &&
+                    upstream.enabled &&
+                    !upstream.bypass.some((pattern) => matchPattern(pattern, host))
+                    ? upstream.url
+                    : ''
+            }
+        })
         this.proxy = proxy
-        const required = proxy.onCertificateRequired.bind(proxy)
-        const missing = proxy.onCertificateMissing.bind(proxy)
-        proxy.onCertificateRequired = (host, callback) => {
-            if (!this.customCertificates?.hasServer(host)) return required(host, callback)
-            callback(null, {
-                keyFile: join(this.store.directory, '__custom_identity__', 'key'),
-                certFile: join(this.store.directory, '__custom_identity__', 'cert'),
-                hosts: [host]
-            })
-        }
-        proxy.onCertificateMissing = (ctx, files, callback) => {
-            if (!this.customCertificates?.hasServer(ctx.hostname))
-                return missing(ctx, files, callback)
-            void this.customCertificates
-                .server(ctx.hostname)
-                .then((identity) =>
-                    callback(null, {
-                        keyFileData: identity.key,
-                        certFileData: identity.certificate,
-                        hosts: [ctx.hostname]
-                    })
-                )
-                .catch((error) => callback(error, {} as never))
-        }
         proxy.onError((ctx, error, kind) => {
+            if (kind === 'WHISTLE_EXIT') void this.stop()
             const t = ctx && this.context.get(ctx)
             if (t) this.complete(t, error ?? new Error(kind))
             this.log(`${kind}: ${error?.message ?? 'Proxy error'}`, 'error')
@@ -458,6 +476,7 @@ export class ProxyEngine {
                 return
             }
             Object.assign(options, this.customCertificates?.client(new URL(options.url).hostname))
+            if (this.upstreamHTTPSAgent?.options.ca) options.ca = this.upstreamHTTPSAgent.options.ca
             const t = this.create(options.url, 'GET', headers(options.headers ?? {}))
             const clientSocket =
                 ctx.connectRequest?.socket ??
@@ -552,7 +571,7 @@ export class ProxyEngine {
             this.log(`Proxy listening on ${host}:${this.store.settings.port}`)
             this.emit({ type: 'state' })
         } catch (error) {
-            if (proxy.httpServer) proxy.close()
+            if (proxy.httpServer) await proxy.close()
             this.routeAgent.destroy()
             this.proxy = undefined
             throw error
@@ -571,6 +590,10 @@ export class ProxyEngine {
             (s) => s.enabled && s.phase === phase && matchPattern(s.pattern, t.url)
         )
         if (!scripts.length || !this.scriptRunner) return source
+        if (isStreaming(source)) {
+            this.log(`Skipped body scripts for a streaming ${phase}: ${t.host}`, 'info')
+            return source
+        }
         if (Number(source.headers['content-length']) > BODY_LIMIT) {
             this.log(`Skipped scripts for a body larger than 2 MB: ${t.host}`, 'warn')
             return source
@@ -596,15 +619,19 @@ export class ProxyEngine {
                           if (oversized) for await (const chunk of source) yield chunk
                       })()
                   )
-            return Object.assign(data, {
-                headers: { ...source.headers },
-                method: source.method,
-                url: source.url,
-                socket: source.socket,
-                httpVersion: source.httpVersion,
-                statusCode: source.statusCode,
-                statusMessage: source.statusMessage
-            }) as http.IncomingMessage
+            return Object.defineProperty(
+                Object.assign(data, {
+                    headers: { ...source.headers },
+                    method: source.method,
+                    url: source.url,
+                    socket: source.socket,
+                    httpVersion: source.httpVersion,
+                    statusCode: source.statusCode,
+                    statusMessage: source.statusMessage
+                }),
+                'trailers',
+                { get: () => source.trailers }
+            ) as http.IncomingMessage
         }
         if (oversized) {
             this.log(`Skipped scripts for a streaming body larger than 2 MB: ${t.host}`, 'warn')
@@ -679,6 +706,10 @@ export class ProxyEngine {
             return
         }
         const t = this.create(url, req.method ?? 'GET', headers(req.headers))
+        t.httpVersion = req.httpVersion
+        ctx.onTimings = (timings) => {
+            t.timings = { ...t.timings, ...timings }
+        }
         await this.identify(t, ctx.connectRequest?.socket ?? req.socket)
         this.context.set(ctx, t)
         this.track(req.socket)
@@ -801,6 +832,12 @@ export class ProxyEngine {
             if (slice.length) requestChunks.push(slice)
             requestStored += slice.length
             if (t.requestBytes > BODY_LIMIT) t.truncated = true
+            if (t.httpVersion === '2.0') {
+                const body = Buffer.concat(requestChunks)
+                t.requestBody = body.toString('utf8')
+                t.requestBase64 = body.toString('base64')
+                this.publish(t)
+            }
             done(null, chunk)
         })
         ctx.onRequestEnd((_ctx, done) => {
@@ -884,6 +921,15 @@ export class ProxyEngine {
             if (slice.length) responseChunks.push(slice)
             responseStored += slice.length
             if (t.responseBytes > BODY_LIMIT) t.truncated = true
+            if (
+                t.httpVersion === '2.0' ||
+                /text\/event-stream/.test(t.responseHeaders['content-type'] ?? '')
+            ) {
+                const body = Buffer.concat(responseChunks)
+                t.responseBody = body.toString('utf8')
+                t.responseBase64 = body.toString('base64')
+                this.publish(t)
+            }
             done(null, chunk)
         })
         ctx.onResponseEnd((_ctx, done) => {
@@ -898,6 +944,7 @@ export class ProxyEngine {
                 !/json|text|xml|javascript|form/.test(t.responseHeaders['content-type'] ?? '')
             )
                 t.responseBase64 = body.toString('base64')
+            t.responseTrailers = headers(ctx.serverToProxyResponse?.trailers ?? {})
             this.complete(t)
             done()
         })
@@ -1053,12 +1100,9 @@ export class ProxyEngine {
         for (const [id] of this.pending) this.resolveBreakpoint(id, 'abort')
         for (const socket of this.sockets) socket.destroy()
         this.sockets.clear()
-        this.proxy?.wsServer?.clients.forEach((ws) => ws.terminate())
-        for (const server of Object.values(this.proxy?.sslServers ?? {}))
-            server.wsServer?.clients.forEach((ws) => ws.terminate())
         this.proxy?.httpAgent?.destroy()
         this.proxy?.httpsAgent?.destroy()
-        if (this.proxy?.httpServer) this.proxy.close()
+        if (this.proxy?.httpServer) await this.proxy.close()
         this.proxy = undefined
         this.running = false
         this.log('Proxy stopped')

@@ -1,0 +1,10 @@
+--- a/lib/inspectors/res.js
++++ b/lib/inspectors/res.js
+@@ -645,6 +645,7 @@
+                         options,
+                         res.response
+                       );
++                    if (config.fluxyClient) config.fluxyClient(req, client);
+                     curClient = client;
+                     req._clientReq = client;
+                     client.once('error', retry);

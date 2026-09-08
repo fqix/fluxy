@@ -230,6 +230,8 @@ export interface Transaction {
     host: string
     path: string
     protocol: string
+    httpVersion?: string
+    responseTrailers?: Headers
     client: string
     clientPID?: number
     clientIdentity?: string
@@ -436,7 +438,7 @@ export function contentKind(t: Transaction): string {
     if (t.frames.length || t.protocol === 'WebSocket') return 'WebSocket'
     if (
         [t.requestHeaders['content-type'], t.responseHeaders['content-type']].some((ct) =>
-            /^application\/grpc(?:[+;\s]|$|-web(?:[+;\s]|$|text(?:[+;\s]|$)))/i.test(ct ?? '')
+            /^application\/grpc(?:[+;\s]|$|-web(?:[+;\s]|$|-?text(?:[+;\s]|$)))/i.test(ct ?? '')
         )
     )
         return 'gRPC'
@@ -494,6 +496,8 @@ export const transactionSchema: z.ZodType<Transaction> = z.object({
     host: z.string().max(2000),
     path: z.string().max(32000),
     protocol: z.string().max(30),
+    httpVersion: z.string().max(20).optional(),
+    responseTrailers: z.record(z.string(), z.string()).optional(),
     client: z.string().max(1000),
     clientPID: z.number().int().positive().optional(),
     clientIdentity: z.string().max(2000).optional(),

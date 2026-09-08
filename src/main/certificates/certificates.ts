@@ -129,7 +129,7 @@ export async function certificateStatus(
                         '-Command',
                         `$ErrorActionPreference='Stop'; $store=New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine'); $store.Open('ReadOnly'); try { $sha=[Security.Cryptography.SHA256]::Create(); $found=@($store.Certificates | Where-Object { [BitConverter]::ToString($sha.ComputeHash($_.RawData)).Replace('-','') -eq '${fingerprint}' }).Count -gt 0; $found | ConvertTo-Json } finally { $store.Close() }`
                     ],
-                    { timeout: 10000, windowsHide: true }
+                    { timeout: 30000, windowsHide: true }
                 )
                 status.trusted = JSON.parse(stdout) === true
             }

@@ -131,7 +131,9 @@ export function filterFieldValue(t: Transaction, field: FilterRule['field']): st
                 if (type === 'application/x-www-form-urlencoded') return 'form'
                 if (type === 'multipart/form-data') return 'multipartForm'
                 if (
-                    /^application\/(grpc(?:-web)?(?:\+.*)?|(?:x-)?protobuf)$/.test(type) ||
+                    /^application\/(grpc(?:-web(?:-?text)?)?(?:\+.*)?|(?:x-)?protobuf)$/.test(
+                        type
+                    ) ||
                     type.endsWith('+proto')
                 )
                     return 'protobuf'
