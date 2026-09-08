@@ -16,6 +16,7 @@ import type { Store } from '../storage/store'
 import type { ProxyEngine } from '../capture/proxy'
 
 import { routeInterface, tunInterfaceName } from './tun-platform'
+import { waitForSplitDNSRemoval, type SplitDNS } from './split-dns'
 import { supportedHelperPlatform } from '../system/helper-platform'
 
 const execute = promisify(execFile)
@@ -28,6 +29,7 @@ export async function unusedPort() {
     return port
 }
 export class TunService {
+    splitDNS?: SplitDNS
     status: TunStatus = { state: 'stopped', available: false }
     private helperStarted = false
     private bridge?: TunBridge
@@ -89,7 +91,12 @@ export class TunService {
         return this.starting
     }
     private async launch() {
-        this.setStatus({ state: 'starting', error: undefined, interfaceName: undefined })
+        this.setStatus({
+            state: 'starting',
+            error: undefined,
+            interfaceName: undefined,
+            splitDNS: !!this.splitDNS
+        })
         try {
             await this.checkCore()
             if (!this.status.available) throw new Error(this.status.error)
@@ -104,7 +111,7 @@ export class TunService {
                     throw new Error('TUN exit cannot point to Fluxy itself')
                 const probe = await connect(settings.socksPort)
                 probe.destroy()
-            } else if (!egressInterface) {
+            } else if (!egressInterface && !this.splitDNS) {
                 egressInterface = await routeInterface('default')
                 const routes = await Promise.all(
                     ['1.1.1.1', '198.18.0.1'].map((destination) => routeInterface(destination))
@@ -117,7 +124,7 @@ export class TunService {
                         'An existing VPN or split route is active. Select its local SOCKS5 exit port or an explicit network interface.'
                     )
             }
-            if (!settings.socksPort && !networkInterfaces()[egressInterface])
+            if (!this.splitDNS && !settings.socksPort && !networkInterfaces()[egressInterface])
                 throw new Error('Selected exit interface is unavailable')
             if (this.canceled) throw new Error('TUN start canceled')
             if (!this.helper) throw new Error('Helper Tool is unavailable')
@@ -155,7 +162,8 @@ export class TunService {
                         egressPort,
                         password,
                         interfaceName,
-                        egressInterface
+                        egressInterface,
+                        splitDNS: this.splitDNS
                     })
                 ),
                 { mode: 0o600 }
@@ -174,7 +182,8 @@ export class TunService {
                 interfaceName,
                 egressInterface,
                 socksPort: settings.socksPort,
-                routeCIDRs: settings.routeCIDRs
+                routeCIDRs: settings.routeCIDRs,
+                ...(this.splitDNS ? { splitDNS: this.splitDNS } : {})
             })
             const deadline = Date.now() + 30000
             while (Date.now() < deadline) {
@@ -187,9 +196,14 @@ export class TunService {
                     try {
                         const probe = await connect(egressPort)
                         probe.destroy()
-                        this.setStatus({ state: 'running', interfaceName, error: undefined })
+                        this.setStatus({
+                            state: 'running',
+                            interfaceName,
+                            error: undefined,
+                            splitDNS: !!this.splitDNS
+                        })
                         this.engine.log(
-                            `TUN started on ${interfaceName}; exit ${settings.socksPort ? `SOCKS5 127.0.0.1:${settings.socksPort}` : egressInterface}`
+                            `TUN started on ${interfaceName}; exit ${this.splitDNS ? 'existing routes with Split DNS / Fake IP' : settings.socksPort ? `SOCKS5 127.0.0.1:${settings.socksPort}` : egressInterface}`
                         )
                         return
                     } catch {
@@ -256,8 +270,9 @@ export class TunService {
                     await delay(150)
                 if (this.ownedInterface && networkInterfaces()[this.ownedInterface]) throw error
             }
-            this.helperStarted = false
         }
+        if (this.splitDNS && this.ownedInterface) await waitForSplitDNSRemoval(this.ownedInterface)
+        this.helperStarted = false
         if (this.ownedInterface && networkInterfaces()[this.ownedInterface])
             throw new Error('TUN interface still exists; keep Fluxy open and retry Stop')
         if (this.ownsEngine) {
@@ -270,6 +285,6 @@ export class TunService {
         if (this.directory) await rm(this.directory, { recursive: true, force: true })
         this.directory = undefined
         this.ownedInterface = undefined
-        this.setStatus({ interfaceName: undefined })
+        this.setStatus({ interfaceName: undefined, splitDNS: false })
     }
 }

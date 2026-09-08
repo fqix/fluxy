@@ -57,7 +57,9 @@ The AI assistant has been removed. See [feature coverage and limits](ELECTRON.md
 
 ### TUN compatibility
 
-Fluxy's current TUN mode conflicts with Clash and sing-box. Before enabling Fluxy TUN, disable TUN mode in those applications or quit them. Avoid running their TUN modes simultaneously.
+On macOS, leave the TUN exit interface, SOCKS5 port and route CIDRs at their automatic defaults. When another Mihomo or sing-box process is running, Fluxy offers TUN coexistence: its own sing-box answers DNS with Fake IPs, a temporary split DNS resolver directs system lookups to it, and only Fluxy's Fake IP ranges enter its TUN. Real egress follows the existing routes, including the other proxy's TUN. Open the proxy status panel and use **Capture domains** in TUN settings to select the DNS capture scope. Enter one domain per line; each entry includes its subdomains. An empty list retains all-domain capture. With a nonempty list, only matching domains use Fluxy DNS and Fake IP, and this also works without another proxy running. Save the settings or click Start TUN to apply. Explicit exit or route settings keep manual routing and cannot be combined with domain-scoped capture.
+
+The helper removes Fluxy's resolver on Stop, disconnect or process exit. Fake IP pools avoid existing specific IPv4 routes; the upstream DNS server is captured before activation to prevent DNS recursion. Cached IPs, IP-literal requests and applications using their own encrypted DNS may bypass this DNS-based capture path. Automatic split DNS coexistence is currently macOS-only; Linux and Windows retain their existing TUN exit configuration.
 
 ## Verify and package
 

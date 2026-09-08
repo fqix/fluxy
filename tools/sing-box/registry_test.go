@@ -11,7 +11,7 @@ import (
 
 func TestCoreContextSupportsCaptureProfile(t *testing.T) {
 	data := []byte(`{
-        "dns":{"servers":[{"type":"local","tag":"local"}]},
+        "dns":{"servers":[{"type":"local","tag":"local"},{"type":"fakeip","tag":"fakeip","inet4_range":"198.19.0.0/16","inet6_range":"fd7a:115c:a1e0::/48"}]},
         "inbounds":[
             {"type":"tun","tag":"capture","address":["172.31.255.1/30"],"stack":"gvisor","auto_route":true,"dns_mode":"disabled"},
             {"type":"http","tag":"egress","listen":"127.0.0.1","listen_port":19092},

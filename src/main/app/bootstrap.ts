@@ -23,6 +23,7 @@ import { HelperService } from '../system/helper'
 import { z } from 'zod'
 import { Store } from '../storage/store'
 import { TunService } from '../tun/tun'
+import { prepareSplitDNS } from '../tun/split-dns'
 import { networkInterfaces } from 'node:os'
 import { ProxyEngine } from '../capture/proxy'
 import { ScriptRunner } from '../rules/scripting'
@@ -975,7 +976,34 @@ else {
             if (quitting) return
             engine.scriptRunner = (script, message) => scripts.run(script, message)
             systemProxy = new SystemProxy(store)
-            capture = new CaptureController(() => store.settings, engine, tun, systemProxy)
+            capture = new CaptureController(
+                () => store.settings,
+                engine,
+                tun,
+                systemProxy,
+                async (signal) => {
+                    tun.splitDNS = undefined
+                    if (
+                        store.settings.tun.socksPort ||
+                        store.settings.tun.interface ||
+                        store.settings.tun.routeCIDRs.length
+                    ) {
+                        if (store.settings.tun.captureDomains.length)
+                            throw new Error(
+                                'Use automatic exit settings and clear route CIDRs for domain-based TUN capture'
+                            )
+                        return !signal.aborted
+                    }
+                    const splitDNS = await prepareSplitDNS(
+                        signal,
+                        (options) => dialog.showMessageBox(window!, options),
+                        store.settings.tun.captureDomains
+                    )
+                    if (splitDNS === null) return false
+                    tun.splitDNS = splitDNS
+                    return !signal.aborted
+                }
+            )
             mcp = new MCPService(store, engine)
             await rm(join(store.directory, 'assistant-key.json'), { force: true }).catch(() =>
                 engine.log('Could not remove the legacy assistant credential file', 'warn')
@@ -1032,6 +1060,7 @@ else {
         event.preventDefault()
         if (quitting) return
         quitting = true
+        capture?.cancelPendingStart()
         updater?.close()
         void (async () => {
             // Let the current initialization await settle, then stop only the

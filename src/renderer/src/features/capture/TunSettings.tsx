@@ -1,4 +1,3 @@
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import type { Run } from '@/types/actions'
@@ -15,8 +14,7 @@ export function TunSettingsPanel({
     run: Run
     compact?: boolean
 }) {
-    const [config, setConfig] = useState(snapshot.settings.tun)
-    const [routes, setRoutes] = useState(config.routeCIDRs.join('\n'))
+    const [domains, setDomains] = useState(snapshot.settings.tun.captureDomains.join('\n'))
     const [saving, setSaving] = useState(false)
     const active = ['starting', 'running', 'stopping'].includes(snapshot.tun.state)
     const locked = snapshot.running || active || saving
@@ -28,7 +26,13 @@ export function TunSettingsPanel({
             await window.fluxy.settings({
                 ...current.settings,
                 captureMode: mode,
-                tun: { ...config, routeCIDRs: routes.split(/[\s,]+/).filter(Boolean) }
+                tun: {
+                    ...current.settings.tun,
+                    interface: '',
+                    socksPort: 0,
+                    routeCIDRs: [],
+                    captureDomains: domains.split(/[\s,]+/).filter(Boolean)
+                }
             })
         } finally {
             setSaving(false)
@@ -91,63 +95,22 @@ export function TunSettingsPanel({
                     </p>
                     <HelperPanel snapshot={snapshot} run={run} compact />
                     <label>
-                        Exit interface
-                        <select
-                            aria-label="TUN exit interface"
-                            disabled={locked || config.socksPort > 0}
-                            value={config.interface}
-                            onChange={(e) => setConfig({ ...config, interface: e.target.value })}
-                        >
-                            <option value="">Detect automatically</option>
-                            {[
-                                ...new Set([
-                                    ...snapshot.networkInterfaces,
-                                    ...(config.interface ? [config.interface] : [])
-                                ])
-                            ].map((name) => (
-                                <option key={name}>{name}</option>
-                            ))}
-                        </select>
-                    </label>
-                    <label>
-                        Local SOCKS5 exit port
-                        <Input
-                            aria-label="TUN SOCKS5 exit port"
-                            type="number"
-                            min={0}
-                            max={65535}
-                            disabled={locked}
-                            value={config.socksPort}
-                            onChange={(e) =>
-                                setConfig({ ...config, socksPort: Number(e.target.value) })
-                            }
-                        />
-                    </label>
-                    <p className="muted">
-                        Use 0 for direct interface routing. If another VPN uses Fake-IP or split
-                        routes, enter its local SOCKS5 port. TUN uses this exit independently of
-                        Upstream Proxy; disable Upstream Proxy before starting.
-                    </p>
-                    <label>
-                        Route CIDRs (optional)
+                        Capture domains
                         <Textarea
-                            aria-label="TUN route CIDRs"
+                            aria-label="TUN capture domains"
                             rows={3}
-                            placeholder={'Leave empty for all destinations\n203.0.113.10/32'}
+                            placeholder={'example.com\napi.example.net'}
                             disabled={locked}
-                            value={routes}
-                            onChange={(e) => setRoutes(e.target.value)}
+                            value={domains}
+                            onChange={(e) => setDomains(e.target.value)}
                         />
                     </label>
-                    <p className="muted">
-                        One IPv4 or IPv6 CIDR per line. UDP and non-HTTP traffic are forwarded
-                        without body inspection. DNS settings are preserved.
-                    </p>
                     <div className="tun-status" role="status">
                         <span
                             className={`dot ${snapshot.tun.state === 'running' ? 'green' : ''}`}
                         />
                         TUN: {snapshot.tun.state}
+                        {snapshot.tun.splitDNS ? ' · Split DNS / Fake IP' : ''}
                         {snapshot.tun.interfaceName ? ` · ${snapshot.tun.interfaceName}` : ''}
                     </div>
                     {snapshot.tun.error && (
@@ -223,10 +186,10 @@ export function HelperPanel({
             </p>
             {!compact && (
                 <p className="muted">
-                    Install once to enable TUN and install Fluxy's root CA in the system trust
-                    store. Your operating system requests administrator authorization only for
-                    installation, updates, or repair or removal. The helper stops TUN when Fluxy
-                    disconnects.
+                    Complete setup to install Helper Tool and trust Fluxy's root CA. On macOS,
+                    first-time setup may show separate helper and certificate authorization dialogs.
+                    Normal TUN starts reuse the installed helper without another authorization. The
+                    helper stops TUN when Fluxy disconnects.
                 </p>
             )}
             {helper.error && (
@@ -241,10 +204,10 @@ export function HelperPanel({
                         onClick={() => act(() => window.fluxy.installHelper())}
                     >
                         {helper.state === 'outdated'
-                            ? 'Update Helper'
+                            ? 'Update Helper & CA'
                             : helper.state === 'error'
-                              ? 'Repair Helper'
-                              : 'Install Helper'}
+                              ? 'Repair Helper & CA'
+                              : 'Set Up Helper & CA'}
                     </Button>
                 )}
                 <Button

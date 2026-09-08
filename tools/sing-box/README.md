@@ -15,9 +15,9 @@ alone would still register many unused protocols through `include`.
 
 | Area | Included |
 | --- | --- |
-| Inbounds | TUN, HTTP, SOCKS |
+| Inbounds | TUN, HTTP, SOCKS, Direct (local DNS testing) |
 | Outbounds | Direct, HTTP CONNECT, SOCKS |
-| DNS transports | Local, UDP, TCP, TLS, HTTPS |
+| DNS transports | Local, UDP, TCP, TLS, HTTPS, Fake IP |
 | TUN stack | gVisor (`with_gvisor`) and upstream system stack support |
 | Routing | Shared upstream routing and HTTP/TLS sniffing used by the Electron bridge |
 | CLI | `version`, `check -c CONFIG`, `run -c CONFIG` |

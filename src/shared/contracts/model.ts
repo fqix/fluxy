@@ -10,7 +10,30 @@ export const highlightSchema = z
     .nullable()
 export type HighlightColor = z.infer<typeof highlightSchema>
 
+export const captureDomainsSchema = z
+    .array(
+        z
+            .string()
+            .trim()
+            .toLowerCase()
+            .transform((value) => value.replace(/^\*\./, '').replace(/\.$/, ''))
+            .pipe(
+                z
+                    .string()
+                    .min(1)
+                    .max(253)
+                    .regex(
+                        /^(?![0-9.]+$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/,
+                        'Enter a domain such as example.com, without a URL, port or path'
+                    )
+            )
+    )
+    .max(100)
+    .transform((domains) => [...new Set(domains)])
+    .default([])
+
 export const tunSettingsSchema = z.object({
+    captureDomains: captureDomainsSchema,
     interface: z
         .string()
         .max(128)
@@ -33,6 +56,7 @@ export interface TunStatus {
     state: 'stopped' | 'starting' | 'running' | 'stopping' | 'error'
     available: boolean
     interfaceName?: string
+    splitDNS?: boolean
     error?: string
 }
 export const settingsSchema = z.object({
@@ -43,7 +67,12 @@ export const settingsSchema = z.object({
         })
         .default({ checkAutomatically: true, downloadAutomatically: false }),
     captureMode: z.enum(['proxy', 'tun']).default('tun'),
-    tun: tunSettingsSchema.default({ interface: '', socksPort: 0, routeCIDRs: [] }),
+    tun: tunSettingsSchema.default({
+        interface: '',
+        socksPort: 0,
+        routeCIDRs: [],
+        captureDomains: []
+    }),
     onboardingCompleted: z.boolean().default(false),
     showWelcomeOnLaunch: z.boolean().default(true),
     port: z.number().int().min(1024).max(65535).default(6060),

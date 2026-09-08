@@ -1,0 +1,36 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+const discovery = vi.hoisted(() => vi.fn())
+vi.mock('../../src/main/tun/proxy-discovery', () => ({ discoverProxyProcesses: discovery }))
+vi.mock('node:child_process', () => ({
+    execFile: (...args: unknown[]) =>
+        (args.at(-1) as Function)(null, { stdout: '198.18/16 utun1024\n', stderr: '' })
+}))
+vi.mock('node:fs/promises', () => ({ readFile: async () => 'nameserver 192.0.2.53\n' }))
+import { prepareSplitDNS } from '../../src/main/tun/split-dns'
+
+describe.skipIf(process.platform !== 'darwin')('domain capture preparation', () => {
+    beforeEach(() => discovery.mockResolvedValue([]))
+    it('enables selected domains even without an external proxy and needs no coexistence dialog', async () => {
+        const prompt = vi.fn()
+        expect(
+            await prepareSplitDNS(new AbortController().signal, prompt, ['Example.com'])
+        ).toEqual({ ipv4Range: '198.19.0.0/16', server: '192.0.2.53', domains: ['example.com'] })
+        expect(prompt).not.toHaveBeenCalled()
+    })
+    it('keeps default routing when neither a domain scope nor a proxy exists', async () => {
+        expect(await prepareSplitDNS(new AbortController().signal, vi.fn(), [])).toBeUndefined()
+    })
+    it('cancels scoped capture before changing transport when the coexistence dialog is dismissed', async () => {
+        discovery.mockResolvedValue([{ name: 'Mihomo', pid: 123 }])
+        const prompt = vi.fn(async () => ({ response: 1, checkboxChecked: false }))
+        expect(
+            await prepareSplitDNS(new AbortController().signal, prompt, ['example.com'])
+        ).toBeNull()
+        expect(prompt.mock.calls[0]).toBeDefined()
+    })
+    it('does not prepare selected-domain capture after cancellation', async () => {
+        const controller = new AbortController()
+        controller.abort()
+        expect(await prepareSplitDNS(controller.signal, vi.fn(), ['example.com'])).toBeNull()
+    })
+})

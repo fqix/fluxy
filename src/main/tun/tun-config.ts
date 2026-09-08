@@ -1,4 +1,5 @@
 import type { TunSettings } from '../../shared/contracts/model'
+import { fakeIPv6Range, splitDNSAddress, type SplitDNS } from './split-dns'
 
 export function tunConfig(options: {
     settings: TunSettings
@@ -8,6 +9,7 @@ export function tunConfig(options: {
     interfaceName: string
     egressInterface: string
     socksTestPort?: number
+    splitDNS?: SplitDNS
 }) {
     const {
         settings,
@@ -16,7 +18,8 @@ export function tunConfig(options: {
         password,
         interfaceName,
         egressInterface,
-        socksTestPort
+        socksTestPort,
+        splitDNS
     } = options
     const direct = settings.socksPort
         ? {
@@ -29,11 +32,35 @@ export function tunConfig(options: {
         : {
               type: 'direct',
               tag: 'direct',
-              ...(!socksTestPort ? { bind_interface: egressInterface } : {})
+              ...(!socksTestPort && !splitDNS ? { bind_interface: egressInterface } : {})
           }
     return {
         log: { level: 'warn', timestamp: true },
-        dns: { servers: [{ type: 'local', tag: 'local' }] },
+        dns: splitDNS
+            ? {
+                  servers: [
+                      { type: 'udp', tag: 'local', server: splitDNS.server },
+                      {
+                          type: 'fakeip',
+                          tag: 'fakeip',
+                          inet4_range: splitDNS.ipv4Range,
+                          inet6_range: fakeIPv6Range
+                      }
+                  ],
+                  rules: [
+                      {
+                          inbound: ['capture'],
+                          query_type: ['A', 'AAAA'],
+                          ...(splitDNS.domains.length ? { domain_suffix: splitDNS.domains } : {}),
+                          action: 'route',
+                          server: 'fakeip',
+                          rewrite_ttl: 1
+                      }
+                  ],
+                  final: 'local',
+                  independent_cache: true
+              }
+            : { servers: [{ type: 'local', tag: 'local' }] },
         inbounds: [
             socksTestPort
                 ? {
@@ -46,7 +73,10 @@ export function tunConfig(options: {
                       type: 'tun',
                       tag: 'capture',
                       interface_name: interfaceName,
-                      address: ['172.31.255.1/30', 'fdfe:dcba:9876::1/126'],
+                      address: [
+                          '172.31.255.1/30',
+                          splitDNS ? 'fd7a:115c:a1e1::1/126' : 'fdfe:dcba:9876::1/126'
+                      ],
                       mtu: 1500,
                       stack: 'gvisor',
                       auto_route: true,
@@ -59,7 +89,17 @@ export function tunConfig(options: {
                           '224.0.0.0/4',
                           'ff00::/8'
                       ],
-                      ...(settings.routeCIDRs.length ? { route_address: settings.routeCIDRs } : {})
+                      ...(splitDNS
+                          ? {
+                                route_address: [
+                                    splitDNS.ipv4Range,
+                                    fakeIPv6Range,
+                                    `${splitDNSAddress}/32`
+                                ]
+                            }
+                          : settings.routeCIDRs.length
+                            ? { route_address: settings.routeCIDRs }
+                            : {})
                   },
             {
                 type: 'http',
@@ -85,6 +125,7 @@ export function tunConfig(options: {
             final: 'direct',
             rules: [
                 { inbound: ['egress'], action: 'route', outbound: 'direct' },
+                ...(splitDNS ? [{ inbound: ['capture'], port: 53, action: 'hijack-dns' }] : []),
                 { action: 'sniff', sniffer: ['http', 'tls'], timeout: '300ms' },
                 { network: 'tcp', protocol: ['http', 'tls'], action: 'route', outbound: 'inspect' }
             ]

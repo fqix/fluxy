@@ -19,11 +19,14 @@ interface SystemProxy {
 export class CaptureController {
     private pending: Promise<void> = Promise.resolve()
     private operations = 0
+    private startGeneration = 0
+    private preparing?: AbortController
     constructor(
         private settings: () => Settings,
         private engine: Engine,
         private tun: Tun,
-        private systemProxy: SystemProxy
+        private systemProxy: SystemProxy,
+        private beforeTunStart?: (signal: AbortSignal) => Promise<boolean>
     ) {}
 
     private enqueue(action: () => Promise<void>) {
@@ -44,8 +47,24 @@ export class CaptureController {
     }
 
     start() {
+        const generation = this.startGeneration
         return this.enqueue(async () => {
             if (this.settings().captureMode === 'tun') {
+                if (generation !== this.startGeneration) return
+                if (this.tun.status.state === 'running') return
+                if (this.beforeTunStart) {
+                    const controller = new AbortController()
+                    this.preparing = controller
+                    try {
+                        if (
+                            !(await this.beforeTunStart(controller.signal)) ||
+                            controller.signal.aborted
+                        )
+                            return
+                    } finally {
+                        this.preparing = undefined
+                    }
+                }
                 if (this.systemProxy.enabled) await this.systemProxy.set(false)
                 await this.tun.start()
             } else if (this.settings().autoSystemProxy) {
@@ -55,11 +74,17 @@ export class CaptureController {
     }
 
     stop() {
+        this.cancelPendingStart()
         return this.enqueue(async () => {
             await this.tun.stop()
             if (this.systemProxy.enabled) await this.systemProxy.set(false)
             await this.engine.stop()
         })
+    }
+
+    cancelPendingStart() {
+        this.startGeneration++
+        this.preparing?.abort()
     }
 
     setSystemProxy(enabled: boolean) {

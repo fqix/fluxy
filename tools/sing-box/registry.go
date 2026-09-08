@@ -11,6 +11,7 @@ import (
 	"github.com/sagernet/sing-box/adapter/service"
 	"github.com/sagernet/sing-box/dns"
 	"github.com/sagernet/sing-box/dns/transport"
+	"github.com/sagernet/sing-box/dns/transport/fakeip"
 	"github.com/sagernet/sing-box/dns/transport/local"
 	"github.com/sagernet/sing-box/protocol/direct"
 	"github.com/sagernet/sing-box/protocol/http"
@@ -25,6 +26,7 @@ func coreContext(ctx context.Context) context.Context {
 	tun.RegisterInbound(inbounds)
 	http.RegisterInbound(inbounds)
 	socks.RegisterInbound(inbounds)
+	direct.RegisterInbound(inbounds)
 
 	outbounds := outbound.NewRegistry()
 	direct.RegisterOutbound(outbounds)
@@ -33,6 +35,7 @@ func coreContext(ctx context.Context) context.Context {
 
 	transports := dns.NewTransportRegistry()
 	local.RegisterTransport(transports)
+	fakeip.RegisterTransport(transports)
 	transport.RegisterUDP(transports)
 	transport.RegisterTCP(transports)
 	transport.RegisterTLS(transports)

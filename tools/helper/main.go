@@ -41,13 +41,14 @@ type pairing struct {
 	} `json:"caller"`
 }
 type tunParams struct {
-	BridgePort      int      `json:"bridgePort"`
-	EgressPort      int      `json:"egressPort"`
-	Password        string   `json:"password"`
-	InterfaceName   string   `json:"interfaceName"`
-	EgressInterface string   `json:"egressInterface"`
-	SocksPort       int      `json:"socksPort"`
-	RouteCIDRs      []string `json:"routeCIDRs"`
+	BridgePort      int             `json:"bridgePort"`
+	EgressPort      int             `json:"egressPort"`
+	Password        string          `json:"password"`
+	InterfaceName   string          `json:"interfaceName"`
+	EgressInterface string          `json:"egressInterface"`
+	SocksPort       int             `json:"socksPort"`
+	RouteCIDRs      []string        `json:"routeCIDRs"`
+	SplitDNS        *splitDNSParams `json:"splitDNS,omitempty"`
 }
 
 func decode(data []byte, target any) error {
@@ -79,7 +80,15 @@ func (p tunParams) validate() error {
 	if len(p.EgressInterface) > 128 || strings.ContainsAny(p.EgressInterface, "\x00\r\n") || p.EgressInterface == p.InterfaceName || p.EgressInterface == "lo" || p.EgressInterface == "lo0" {
 		return errors.New("invalid exit interface")
 	}
-	if p.SocksPort == 0 {
+	if p.SplitDNS != nil {
+		if p.SocksPort != 0 || p.EgressInterface != "" || len(p.RouteCIDRs) != 0 {
+			return errors.New("split DNS cannot override an explicit exit or routes")
+		}
+		if err := p.SplitDNS.validate(); err != nil {
+			return err
+		}
+	}
+	if p.SocksPort == 0 && p.SplitDNS == nil {
 		iface, err := net.InterfaceByName(p.EgressInterface)
 		if err != nil || iface.Flags&net.FlagLoopback != 0 {
 			return errors.New("exit interface unavailable")
@@ -108,7 +117,7 @@ func config(p tunParams) map[string]any {
 	if len(p.RouteCIDRs) > 0 && !helperTesting {
 		tun["route_address"] = p.RouteCIDRs
 	}
-	return map[string]any{
+	c := map[string]any{
 		"log":       map[string]any{"level": "warn", "timestamp": true},
 		"dns":       map[string]any{"servers": []any{map[string]any{"type": "local", "tag": "local"}}},
 		"inbounds":  []any{tun, map[string]any{"type": "http", "tag": "egress", "listen": "127.0.0.1", "listen_port": p.EgressPort, "users": []any{map[string]any{"username": "fluxy", "password": p.Password}}}},
@@ -119,6 +128,10 @@ func config(p tunParams) map[string]any {
 			map[string]any{"network": "tcp", "protocol": []string{"http", "tls"}, "action": "route", "outbound": "inspect"},
 		}},
 	}
+	if p.SplitDNS != nil {
+		applySplitDNSConfig(c, *p.SplitDNS)
+	}
+	return c
 }
 func certificate(data json.RawMessage) (*x509.Certificate, error) {
 	var encoded string
@@ -166,6 +179,7 @@ type session struct {
 	done          chan error
 	release       func()
 	interfaceName string
+	dnsCleanup    func() error
 }
 
 func (s *session) running() bool {
@@ -177,12 +191,22 @@ func (s *session) running() bool {
 		s.child = nil
 		s.input.Close()
 		s.release()
+		if s.dnsCleanup != nil {
+			_ = s.dnsCleanup()
+			s.dnsCleanup = nil
+			flushSplitDNSCache()
+		}
 		return false
 	default:
 		return true
 	}
 }
 func (s *session) stop() error {
+	if s.dnsCleanup != nil {
+		_ = s.dnsCleanup()
+		s.dnsCleanup = nil
+		flushSplitDNSCache()
+	}
 	if s.running() {
 		s.input.Close() // core observes EOF and removes its routes before exiting
 		select {
@@ -264,6 +288,16 @@ func (s *session) start(raw json.RawMessage) error {
 	s.done = make(chan error, 1)
 	s.interfaceName = p.InterfaceName
 	go func() { s.done <- child.Wait() }()
+	if p.SplitDNS != nil && !helperTesting {
+		if err = waitSplitDNSReady(p.SplitDNS.Domains); err == nil {
+			s.dnsCleanup, err = startSplitDNS(p.InterfaceName, p.SplitDNS.Domains)
+		}
+		if err != nil {
+			stopErr := s.stop()
+			return errors.Join(err, stopErr)
+		}
+		flushSplitDNSCache()
+	}
 	return nil
 }
 

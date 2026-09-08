@@ -130,3 +130,55 @@ describe('automatic system proxy capture', () => {
         expect(capture.busy).toBe(false)
     })
 })
+
+describe('TUN exit preparation', () => {
+    it('cancels before changing system proxy or starting TUN', async () => {
+        const { settings, engine, tun, proxy } = setup()
+        settings.captureMode = 'tun'
+        proxy.enabled = true
+        const prepare = vi.fn(async () => false)
+        const capture = new CaptureController(() => settings, engine, tun, proxy, prepare)
+        await capture.start()
+        expect(prepare).toHaveBeenCalledOnce()
+        expect(tun.start).not.toHaveBeenCalled()
+        expect(proxy.set).not.toHaveBeenCalled()
+    })
+    it('aborts an open prompt and any queued starts when Stop is requested', async () => {
+        const { settings, engine, tun, proxy } = setup()
+        settings.captureMode = 'tun'
+        const prepare = vi.fn(
+            (signal: AbortSignal) =>
+                new Promise<boolean>((resolve) => {
+                    signal.addEventListener('abort', () => resolve(true), { once: true })
+                })
+        )
+        const capture = new CaptureController(() => settings, engine, tun, proxy, prepare)
+        const first = capture.start()
+        const second = capture.start()
+        await vi.waitFor(() => expect(prepare).toHaveBeenCalledOnce())
+        const stop = capture.stop()
+        await Promise.all([first, second, stop])
+        expect(prepare.mock.calls[0][0].aborted).toBe(true)
+        expect(prepare).toHaveBeenCalledOnce()
+        expect(tun.start).not.toHaveBeenCalled()
+        expect(tun.stop).toHaveBeenCalledOnce()
+        expect(capture.busy).toBe(false)
+    })
+    it('serializes preparation and starts only once when already running', async () => {
+        const { settings, engine, tun, proxy, calls } = setup()
+        settings.captureMode = 'tun'
+        proxy.enabled = true
+        const prepare = vi.fn(async () => {
+            calls.push('prepare')
+            return true
+        })
+        tun.start.mockImplementation(async () => {
+            calls.push('tun-start')
+            tun.status.state = 'running'
+        })
+        const capture = new CaptureController(() => settings, engine, tun, proxy, prepare)
+        await Promise.all([capture.start(), capture.start()])
+        expect(calls).toEqual(['prepare', 'restore', 'tun-start'])
+        expect(prepare).toHaveBeenCalledOnce()
+    })
+})
