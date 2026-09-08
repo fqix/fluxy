@@ -33,4 +33,15 @@ describe.skipIf(process.platform !== 'darwin')('domain capture preparation', () 
         controller.abort()
         expect(await prepareSplitDNS(controller.signal, vi.fn(), ['example.com'])).toBeNull()
     })
+    it('rediscovers DNS and routes without prompting when restoring the saved TUN mode', async () => {
+        discovery.mockResolvedValue([{ name: 'Mihomo', pid: 123 }])
+        const prompt = vi.fn()
+        expect(
+            await prepareSplitDNS(new AbortController().signal, prompt, ['example.com'], {
+                interactive: false
+            })
+        ).toEqual({ ipv4Range: '198.19.0.0/16', server: '192.0.2.53', domains: ['example.com'] })
+        expect(discovery).toHaveBeenCalled()
+        expect(prompt).not.toHaveBeenCalled()
+    })
 })

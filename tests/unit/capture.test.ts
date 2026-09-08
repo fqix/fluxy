@@ -132,6 +132,49 @@ describe('automatic system proxy capture', () => {
 })
 
 describe('TUN exit preparation', () => {
+    it.each(['proxy', 'tun'] as const)(
+        'restores saved %s mode only when auto-start is enabled',
+        async (mode) => {
+            const { settings, engine, tun, proxy } = setup()
+            settings.captureMode = mode
+            const prepare = vi.fn(async () => true)
+            const capture = new CaptureController(() => settings, engine, tun, proxy, prepare)
+            await capture.restore()
+            expect(engine.start).not.toHaveBeenCalled()
+            expect(tun.start).not.toHaveBeenCalled()
+            expect(prepare).not.toHaveBeenCalled()
+            settings.autoStart = true
+            await capture.restore()
+            if (mode === 'tun') {
+                expect(tun.start).toHaveBeenCalledOnce()
+                expect(prepare).toHaveBeenCalledWith(expect.any(AbortSignal), true)
+                expect(proxy.set).not.toHaveBeenCalled()
+            } else {
+                expect(engine.start).toHaveBeenCalledOnce()
+                expect(proxy.set).toHaveBeenCalledWith(true)
+                expect(prepare).not.toHaveBeenCalled()
+            }
+        }
+    )
+    it('restores a manual SOCKS/HTTP listener without changing system proxy', async () => {
+        const { settings, capture, engine, proxy } = setup()
+        settings.autoStart = true
+        settings.autoSystemProxy = false
+        await capture.restore()
+        expect(engine.running).toBe(true)
+        expect(proxy.set).not.toHaveBeenCalled()
+    })
+    it('keeps the saved mode on failed restoration and allows manual retry', async () => {
+        const { settings, tun, capture } = setup()
+        settings.captureMode = 'tun'
+        settings.autoStart = true
+        tun.start.mockRejectedValueOnce(new Error('Helper is unavailable'))
+        await expect(capture.restore()).rejects.toThrow('Helper is unavailable')
+        expect(settings.captureMode).toBe('tun')
+        expect(settings.autoStart).toBe(true)
+        await capture.start()
+        expect(tun.start).toHaveBeenCalledTimes(2)
+    })
     it('cancels before changing system proxy or starting TUN', async () => {
         const { settings, engine, tun, proxy } = setup()
         settings.captureMode = 'tun'

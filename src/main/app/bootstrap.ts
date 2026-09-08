@@ -981,7 +981,7 @@ else {
                 engine,
                 tun,
                 systemProxy,
-                async (signal) => {
+                async (signal, automatic) => {
                     tun.splitDNS = undefined
                     if (
                         store.settings.tun.socksPort ||
@@ -997,7 +997,8 @@ else {
                     const splitDNS = await prepareSplitDNS(
                         signal,
                         (options) => dialog.showMessageBox(window!, options),
-                        store.settings.tun.captureDomains
+                        store.settings.tun.captureDomains,
+                        { interactive: !automatic }
                     )
                     if (splitDNS === null) return false
                     tun.splitDNS = splitDNS
@@ -1042,8 +1043,12 @@ else {
             if (store.settings.mcpEnabled)
                 await mcp.start().catch((error) => engine.log(String(error), 'error'))
             if (quitting) return
-            if (store.settings.autoStart && store.settings.captureMode !== 'tun')
-                await startCapture().catch((error) => engine.log(String(error), 'error'))
+            await capture
+                .restore()
+                .catch((error) =>
+                    engine.log(`Could not restore capture: ${String(error)}`, 'error')
+                )
+            emit({ type: 'state' })
             if (quitting) return
             app.on('activate', () => {
                 if (!quitting && !window) void createWindow()

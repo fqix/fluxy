@@ -72,7 +72,8 @@ export function selectFakeIPRange(routes: string): string {
 export async function prepareSplitDNS(
     signal: AbortSignal,
     prompt: (options: MessageBoxOptions) => Promise<MessageBoxReturnValue>,
-    captureDomains: string[] = []
+    captureDomains: string[] = [],
+    options: { interactive?: boolean } = {}
 ): Promise<SplitDNS | undefined | null> {
     // Supplemental resolver ownership is implemented for macOS; other platforms keep
     // their existing explicit TUN exit until they have an equivalent DNS lifecycle.
@@ -96,7 +97,9 @@ export async function prepareSplitDNS(
     )
     if (!server) throw new Error('Cannot determine the existing DNS server for TUN coexistence')
     if (signal.aborted) return null
-    if (!processes.length) return { ipv4Range, server, domains }
+    // Automatic startup reuses the saved mode, but always discovers current
+    // routes and DNS instead of restoring stale runtime addresses.
+    if (!processes.length || options.interactive === false) return { ipv4Range, server, domains }
     const { response } = await prompt({
         type: 'info',
         title: 'TUN coexistence',

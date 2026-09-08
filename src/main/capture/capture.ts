@@ -26,7 +26,7 @@ export class CaptureController {
         private engine: Engine,
         private tun: Tun,
         private systemProxy: SystemProxy,
-        private beforeTunStart?: (signal: AbortSignal) => Promise<boolean>
+        private beforeTunStart?: (signal: AbortSignal, automatic: boolean) => Promise<boolean>
     ) {}
 
     private enqueue(action: () => Promise<void>) {
@@ -46,7 +46,11 @@ export class CaptureController {
         return this.operations > 0
     }
 
-    start() {
+    restore() {
+        return this.settings().autoStart ? this.start(true) : Promise.resolve()
+    }
+
+    start(automatic = false) {
         const generation = this.startGeneration
         return this.enqueue(async () => {
             if (this.settings().captureMode === 'tun') {
@@ -57,7 +61,7 @@ export class CaptureController {
                     this.preparing = controller
                     try {
                         if (
-                            !(await this.beforeTunStart(controller.signal)) ||
+                            !(await this.beforeTunStart(controller.signal, automatic)) ||
                             controller.signal.aborted
                         )
                             return

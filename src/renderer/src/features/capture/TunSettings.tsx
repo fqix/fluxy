@@ -90,8 +90,9 @@ export function TunSettingsPanel({
                         Capture traffic from apps that ignore HTTP proxy settings. Helper Tool
                         requests administrator authorization once when installed or updated.
                         Subsequent TUN starts and CA installation reuse it. HTTPS inspection uses
-                        your SSL Proxying rules and still requires certificate trust. TUN starts
-                        only when you click Start, even if proxy auto-start is enabled.
+                        your SSL Proxying rules and still requires certificate trust. When automatic
+                        startup is enabled, Fluxy restores this mode and its saved capture domains
+                        on launch.
                     </p>
                     <HelperPanel snapshot={snapshot} run={run} compact />
                     <label>

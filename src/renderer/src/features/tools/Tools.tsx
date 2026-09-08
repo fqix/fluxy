@@ -556,7 +556,7 @@ export function Preferences({
                                 checked={settings.autoStart}
                                 onChange={(e) => patch({ autoStart: e.target.checked })}
                             />
-                            Start proxy on launch
+                            Start saved capture mode on launch
                         </label>
                         <label className="check">
                             <input

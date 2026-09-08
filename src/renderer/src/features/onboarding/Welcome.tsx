@@ -64,7 +64,15 @@ export function Welcome({
     const finish = (openDeveloper: boolean) =>
         void act('Saving…', async () => {
             const current = await window.fluxy.snapshot()
-            await window.fluxy.settings({ ...current.settings, onboardingCompleted: true })
+            const started =
+                current.settings.captureMode === 'tun'
+                    ? current.tun.state === 'running'
+                    : current.running
+            await window.fluxy.settings({
+                ...current.settings,
+                onboardingCompleted: true,
+                autoStart: started || current.settings.autoStart
+            })
             if (openDeveloper) developerSetup()
             else close()
         })
@@ -139,6 +147,13 @@ export function Welcome({
                         })
                         await window.fluxy.start()
                     }
+                    const current = await window.fluxy.snapshot()
+                    const started =
+                        current.settings.captureMode === 'tun'
+                            ? current.tun.state === 'running'
+                            : current.running
+                    if (started)
+                        await window.fluxy.settings({ ...current.settings, autoStart: true })
                     setCertificate(await window.fluxy.certificateStatus())
                 })
         }
@@ -338,6 +353,10 @@ export function Welcome({
                             {error}
                         </p>
                     )}
+                    <p className="muted">
+                        After enabling capture, Fluxy remembers this mode and starts it
+                        automatically on the next launch. You can turn this off in Settings.
+                    </p>
                     {manual && (
                         <p className="welcome-manual">
                             Manual setup selected. Configure your app to use HTTP and HTTPS proxy
