@@ -209,9 +209,8 @@ export function HelperPanel({
             {!compact && (
                 <p className="muted">
                     Complete setup to install Helper Tool and trust Fluxy's root CA in the same
-                    elevated operation on macOS.
-                    Normal TUN starts reuse the installed helper without another authorization. The
-                    helper stops TUN when Fluxy disconnects.
+                    elevated operation on macOS. Normal TUN starts reuse the installed helper
+                    without another authorization. The helper stops TUN when Fluxy disconnects.
                 </p>
             )}
             {helper.error && (
