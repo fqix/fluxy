@@ -18,6 +18,8 @@ import {
 } from 'lucide-react'
 import {
     ruleSchema,
+    MAX_CAPTURE_ENTRIES,
+    MAX_CAPTURE_BODY_BYTES,
     type Rule,
     type Snapshot,
     type Transaction,
@@ -590,16 +592,47 @@ export function Preferences({
                                 onChange={(e) => patch({ fontSize: Number(e.target.value) })}
                             />
                         </label>
+                        <h3>Capture storage</h3>
                         <label>
                             Maximum captured requests
                             <Input
                                 type="number"
                                 min="100"
-                                max="50000"
+                                max={MAX_CAPTURE_ENTRIES}
                                 value={settings.maxEntries}
                                 onChange={(e) => patch({ maxEntries: Number(e.target.value) })}
                             />
                         </label>
+                        <label>
+                            Maximum request body (KiB)
+                            <Input
+                                type="number"
+                                min="0"
+                                max={MAX_CAPTURE_BODY_BYTES / 1024}
+                                step="1"
+                                value={settings.maxRequestBodyBytes / 1024}
+                                onChange={(e) =>
+                                    patch({ maxRequestBodyBytes: Number(e.target.value) * 1024 })
+                                }
+                            />
+                        </label>
+                        <label>
+                            Maximum response body (KiB)
+                            <Input
+                                type="number"
+                                min="0"
+                                max={MAX_CAPTURE_BODY_BYTES / 1024}
+                                step="1"
+                                value={settings.maxResponseBodyBytes / 1024}
+                                onChange={(e) =>
+                                    patch({ maxResponseBodyBytes: Number(e.target.value) * 1024 })
+                                }
+                            />
+                        </label>
+                        <p className="muted">
+                            2,048 KiB = 2 MiB per direction. Use 0 to keep headers only. Larger
+                            bodies are truncated in capture; network traffic is forwarded in full.
+                        </p>
                     </>
                 )}
             </div>

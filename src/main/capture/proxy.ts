@@ -31,6 +31,7 @@ import { upstreamAgent } from './upstream'
 import { openTunnel } from '../tun/tun-bridge'
 import {
     breakpointEditSchema,
+    MAX_CAPTURE_BODY_BYTES,
     matchPattern,
     matchesRule,
     type BreakpointEdit,
@@ -43,14 +44,15 @@ import {
     type ScriptMessage
 } from '../../shared/contracts/model'
 
-const BODY_LIMIT = 2 * 1024 * 1024
+// Script/breakpoint processing has a fixed safety ceiling independent of previews.
+const BODY_LIMIT = MAX_CAPTURE_BODY_BYTES
 const headers = (input: http.IncomingHttpHeaders): Headers =>
     Object.fromEntries(
         Object.entries(input)
             .filter(([, v]) => v !== undefined)
             .map(([k, v]) => [k.toLowerCase(), Array.isArray(v) ? v.join('\n') : String(v)])
     )
-export function decode(buffer: Buffer, encoding?: string) {
+export function decode(buffer: Buffer, encoding?: string, onLimit?: () => void) {
     try {
         const options = { maxOutputLength: BODY_LIMIT }
         if (encoding === 'gzip') return gunzipSync(buffer, options)
@@ -61,12 +63,14 @@ export function decode(buffer: Buffer, encoding?: string) {
         if (encoding === 'deflate') {
             try {
                 return inflateSync(buffer, options)
-            } catch {
+            } catch (error) {
+                if ((error as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') throw error
                 // Some origins send bare DEFLATE (RFC 1951) without the zlib wrapper.
                 return inflateRawSync(buffer, options)
             }
         }
-    } catch {
+    } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') onLimit?.()
         /* A partial compressed body stays available as raw bytes. */
     }
     return buffer
@@ -242,13 +246,62 @@ export class ProxyEngine {
     publish(t: Transaction) {
         if (!this.published.has(t.id)) return
         this.transactions.set(t.id, t)
+        this.enforceEntryLimit()
+        if (!this.transactions.has(t.id)) return
+        this.emit({ type: 'transaction', transaction: { ...t } })
+    }
+    enforceEntryLimit() {
         while (this.transactions.size > this.store.settings.maxEntries) {
-            const id = [...this.transactions.values()].find((value) => value.state !== 'paused')?.id
+            let id: string | undefined
+            for (const transaction of this.transactions.values()) {
+                if (transaction.state !== 'paused') {
+                    id = transaction.id
+                    break
+                }
+            }
             if (!id) break
             this.transactions.delete(id)
             this.published.delete(id)
         }
-        this.emit({ type: 'transaction', transaction: { ...t } })
+    }
+    private bodyLimit(phase: 'request' | 'response') {
+        return phase === 'request'
+            ? this.store.settings.maxRequestBodyBytes
+            : this.store.settings.maxResponseBodyBytes
+    }
+    private captureBody(
+        t: Transaction,
+        phase: 'request' | 'response',
+        input: Buffer,
+        encoding?: string
+    ) {
+        const limit = this.bodyLimit(phase)
+        const decoded =
+            limit === 0
+                ? input
+                : decode(input, encoding, () => {
+                      t.truncated = true
+                  })
+        const body = decoded.subarray(0, limit)
+        if (decoded.length > limit) t.truncated = true
+        const contentType =
+            phase === 'request'
+                ? t.requestHeaders['content-type']
+                : t.responseHeaders['content-type']
+        const binary =
+            !isUtf8(body) ||
+            (phase === 'request'
+                ? /protobuf|grpc|octet-stream/.test(contentType ?? '')
+                : !/json|text|xml|javascript|form/.test(contentType ?? ''))
+        if (phase === 'request') {
+            t.requestBody = body.toString('utf8')
+            if (binary && body.length) t.requestBase64 = body.toString('base64')
+            else delete t.requestBase64
+        } else {
+            t.responseBody = body.toString('utf8')
+            if (binary && body.length) t.responseBase64 = body.toString('base64')
+            else delete t.responseBase64
+        }
     }
     private bypassed(host: string) {
         return this.store.settings.fullBypassHosts.some((pattern) => matchPattern(pattern, host))
@@ -500,16 +553,25 @@ export class ProxyEngine {
             t.statusMessage = 'Switching Protocols'
             this.context.set(ctx, t)
             this.publish(t)
+            let requestFrameBytes = 0,
+                responseFrameBytes = 0
             ctx.onWebSocketFrame((_ctx, type, fromServer, data, flags, done) => {
                 if (type === 'message') {
                     const buf = Buffer.isBuffer(data) ? data : Buffer.from(String(data))
-                    t.frames.push({
-                        id: randomUUID(),
-                        time: Date.now(),
-                        direction: fromServer ? 'receive' : 'send',
-                        body: buf.subarray(0, 65536).toString(flags?.binary ? 'hex' : 'utf8'),
-                        binary: !!flags?.binary
-                    })
+                    const limit = this.bodyLimit(fromServer ? 'response' : 'request')
+                    const used = fromServer ? responseFrameBytes : requestFrameBytes
+                    const captured = buf.subarray(0, Math.min(65536, Math.max(0, limit - used)))
+                    if (captured.length < buf.length) t.truncated = true
+                    if (fromServer) responseFrameBytes += captured.length
+                    else requestFrameBytes += captured.length
+                    if (captured.length || buf.length === 0)
+                        t.frames.push({
+                            id: randomUUID(),
+                            time: Date.now(),
+                            direction: fromServer ? 'receive' : 'send',
+                            body: captured.toString(flags?.binary ? 'hex' : 'utf8'),
+                            binary: !!flags?.binary
+                        })
                     if (t.frames.length > 1000) {
                         t.frames.shift()
                         t.truncated = true
@@ -829,26 +891,21 @@ export class ProxyEngine {
             responseStored = 0
         ctx.onRequestData((_ctx, chunk, done) => {
             t.requestBytes += chunk.length
-            const slice = chunk.subarray(0, Math.max(0, BODY_LIMIT - requestStored))
+            const limit = this.bodyLimit('request')
+            const slice = chunk.subarray(0, Math.max(0, limit - requestStored))
             if (slice.length) requestChunks.push(slice)
             requestStored += slice.length
-            if (t.requestBytes > BODY_LIMIT) t.truncated = true
+            if (t.requestBytes > limit) t.truncated = true
             if (t.httpVersion === '2.0') {
                 const body = Buffer.concat(requestChunks)
-                t.requestBody = body.toString('utf8')
-                t.requestBase64 = body.toString('base64')
+                this.captureBody(t, 'request', body)
                 this.publish(t)
             }
             done(null, chunk)
         })
         ctx.onRequestEnd((_ctx, done) => {
             const body = Buffer.concat(requestChunks)
-            t.requestBody = body.toString('utf8')
-            if (
-                !isUtf8(body) ||
-                /protobuf|grpc|octet-stream/.test(t.requestHeaders['content-type'] ?? '')
-            )
-                t.requestBase64 = body.toString('base64')
+            this.captureBody(t, 'request', body)
             requestChunks = []
             this.publish(t)
             done()
@@ -884,6 +941,13 @@ export class ProxyEngine {
                         )
                         t.breakpointBodyEditable = text !== undefined
                         t.responseBody = text ?? ''
+                        if (
+                            text !== undefined &&
+                            Buffer.byteLength(text) > this.bodyLimit('response')
+                        ) {
+                            this.captureBody(t, 'response', Buffer.from(text))
+                            t.breakpointBodyEditable = false
+                        }
                         t.breakpointRuleName = rules.find(
                             (r) => r.kind === 'breakpoint' && r.phase !== 'request'
                         )?.name
@@ -918,33 +982,25 @@ export class ProxyEngine {
         })
         ctx.onResponseData((_ctx, chunk, done) => {
             t.responseBytes += chunk.length
-            const slice = chunk.subarray(0, Math.max(0, BODY_LIMIT - responseStored))
+            const limit = this.bodyLimit('response')
+            const slice = chunk.subarray(0, Math.max(0, limit - responseStored))
             if (slice.length) responseChunks.push(slice)
             responseStored += slice.length
-            if (t.responseBytes > BODY_LIMIT) t.truncated = true
+            if (t.responseBytes > limit) t.truncated = true
             if (
                 t.httpVersion === '2.0' ||
                 /text\/event-stream/.test(t.responseHeaders['content-type'] ?? '')
             ) {
                 const body = Buffer.concat(responseChunks)
-                t.responseBody = body.toString('utf8')
-                t.responseBase64 = body.toString('base64')
+                this.captureBody(t, 'response', body)
                 this.publish(t)
             }
             done(null, chunk)
         })
         ctx.onResponseEnd((_ctx, done) => {
-            const body = decode(
-                Buffer.concat(responseChunks),
-                t.responseHeaders['content-encoding']
-            )
+            const body = Buffer.concat(responseChunks)
             responseChunks = []
-            t.responseBody = body.toString('utf8')
-            if (
-                !isUtf8(body) ||
-                !/json|text|xml|javascript|form/.test(t.responseHeaders['content-type'] ?? '')
-            )
-                t.responseBase64 = body.toString('base64')
+            this.captureBody(t, 'response', body, t.responseHeaders['content-encoding'])
             t.responseTrailers = headers(ctx.serverToProxyResponse?.trailers ?? {})
             this.complete(t)
             done()
@@ -959,6 +1015,10 @@ export class ProxyEngine {
                 )
                 t.breakpointBodyEditable = text !== undefined
                 t.requestBody = text ?? ''
+                if (text !== undefined && Buffer.byteLength(text) > this.bodyLimit('request')) {
+                    this.captureBody(t, 'request', Buffer.from(text))
+                    t.breakpointBodyEditable = false
+                }
                 t.requestHeaders = headers(opts.headers)
                 t.requestHeaderEntries = orderedHeaders(opts.headers, req.rawHeaders)
                 t.breakpointRuleName = rules.find(
@@ -1045,9 +1105,8 @@ export class ProxyEngine {
         t.statusMessage = http.STATUS_CODES[status]
         t.responseHeaders = { 'content-type': contentType, 'content-length': String(buffer.length) }
         t.responseHeaderEntries = orderedHeaders(t.responseHeaders)
-        t.responseBody = buffer.subarray(0, BODY_LIMIT).toString('utf8')
+        this.captureBody(t, 'response', buffer)
         t.responseBytes = buffer.length
-        t.truncated = buffer.length > BODY_LIMIT
         ctx.proxyToClientResponse.writeHead(status, t.responseHeaders)
         ctx.proxyToClientResponse.end(buffer)
         this.complete(t)
@@ -1122,7 +1181,7 @@ export class ProxyEngine {
         delete clean['host']
         delete clean['connection']
         const t = this.create(input.url, input.method, clean, 'Composer')
-        t.requestBody = input.body
+        this.captureBody(t, 'request', Buffer.from(input.body))
         t.requestBytes = Buffer.byteLength(input.body)
         return new Promise<Transaction>((resolve) => {
             const req = (url.protocol === 'https:' ? https : http).request(
@@ -1147,24 +1206,16 @@ export class ProxyEngine {
                         stored = 0
                     response.on('data', (chunk: Buffer) => {
                         t.responseBytes += chunk.length
-                        const part = chunk.subarray(0, Math.max(0, BODY_LIMIT - stored))
-                        chunks.push(part)
+                        const limit = this.bodyLimit('response')
+                        const part = chunk.subarray(0, Math.max(0, limit - stored))
+                        if (part.length) chunks.push(part)
                         stored += part.length
-                        t.truncated = t.responseBytes > BODY_LIMIT
+                        if (t.responseBytes > limit) t.truncated = true
                     })
                     response.on('end', () => {
-                        const body = decode(
-                            Buffer.concat(chunks),
-                            t.responseHeaders['content-encoding']
-                        )
+                        const body = Buffer.concat(chunks)
                         chunks = []
-                        t.responseBody = body.toString('utf8')
-                        if (
-                            !/json|text|xml|javascript/.test(
-                                t.responseHeaders['content-type'] ?? ''
-                            )
-                        )
-                            t.responseBase64 = body.toString('base64')
+                        this.captureBody(t, 'response', body, t.responseHeaders['content-encoding'])
                         this.complete(t)
                         resolve(t)
                     })

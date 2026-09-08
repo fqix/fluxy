@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import {
     breakpointTemplateSchema,
+    MAX_CAPTURE_ENTRIES,
     type BreakpointTemplate,
     settingsSchema,
     ruleSchema,
@@ -40,6 +41,13 @@ export class Store {
         if (existsSync(file)) {
             try {
                 const document = JSON.parse(readFileSync(file, 'utf8'))
+                // Older versions allowed up to 50,000 live requests. Preserve the
+                // remaining preferences when applying the new capture ceiling.
+                if (
+                    typeof document.settings?.maxEntries === 'number' &&
+                    document.settings.maxEntries > MAX_CAPTURE_ENTRIES
+                )
+                    document.settings.maxEntries = MAX_CAPTURE_ENTRIES
                 const value = z
                     .object({
                         settings: settingsSchema,

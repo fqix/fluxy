@@ -32,4 +32,14 @@ describe('response content-encoding', () => {
         const truncated = gzipSync(payload).subarray(0, 10)
         expect(decode(truncated, 'gzip')).toEqual(truncated)
     })
+    it('reports decompression beyond the capture ceiling without expanding the whole body', () => {
+        const compressed = gzipSync(Buffer.alloc(2 * 1024 * 1024 + 1, 'a'))
+        let limited = false
+        expect(
+            decode(compressed, 'gzip', () => {
+                limited = true
+            })
+        ).toEqual(compressed)
+        expect(limited).toBe(true)
+    })
 })

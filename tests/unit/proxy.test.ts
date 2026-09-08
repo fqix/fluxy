@@ -112,6 +112,72 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true })
 })
 describe('real proxy traffic', () => {
+    it('caps request and response previews independently while forwarding complete bodies', async () => {
+        store.settings.maxRequestBodyBytes = 4
+        store.settings.maxResponseBodyBytes = 12
+        const result = await request('/limits', '完整内容 is forwarded', 'POST')
+        await waitFor(() => [...engine.transactions.values()][0]?.state === 'completed')
+        const t = [...engine.transactions.values()][0]
+        expect(hits[0].body).toBe('完整内容 is forwarded')
+        expect(JSON.parse(result.body).body).toBe(hits[0].body)
+        expect(t.requestBody).toBe(Buffer.from(hits[0].body).subarray(0, 4).toString('utf8'))
+        expect(t.responseBody).toBe(result.body.slice(0, 12))
+        expect(t.requestBytes).toBe(Buffer.byteLength(hits[0].body))
+        expect(t.responseBytes).toBe(Buffer.byteLength(result.body))
+        expect(t.truncated).toBe(true)
+    })
+    it('supports headers-only capture without changing traffic', async () => {
+        store.settings.maxRequestBodyBytes = 0
+        store.settings.maxResponseBodyBytes = 0
+        const result = await request('/headers-only', 'forward me', 'POST')
+        await waitFor(() => [...engine.transactions.values()][0]?.state === 'completed')
+        const t = [...engine.transactions.values()][0]
+        expect(JSON.parse(result.body).body).toBe('forward me')
+        expect(t).toMatchObject({ requestBody: '', responseBody: '', truncated: true, status: 200 })
+        expect(t.requestBase64).toBeUndefined()
+        expect(t.responseBase64).toBeUndefined()
+    })
+    it('caps decompressed response previews as well as streamed response chunks', async () => {
+        store.settings.maxResponseBodyBytes = 128
+        const payload = 'decoded response '.repeat(100)
+        origin.removeAllListeners('request')
+        origin.on('request', (req, res) => {
+            if (req.url === '/compressed-limit') {
+                res.setHeader('content-type', 'text/plain')
+                res.setHeader('content-encoding', 'gzip')
+                res.end(gzipSync(payload))
+            } else {
+                res.setHeader('content-type', 'text/event-stream')
+                res.write('data: ' + 'x'.repeat(500) + '\n\n')
+                res.end('data: done\n\n')
+            }
+        })
+        await request('/compressed-limit')
+        await waitFor(() => [...engine.transactions.values()][0]?.state === 'completed')
+        const compressed = [...engine.transactions.values()][0]
+        expect(compressed.responseBody).toBe(payload.slice(0, 128))
+        expect(compressed.truncated).toBe(true)
+        const stream = await request('/stream-limit')
+        await waitFor(() => [...engine.transactions.values()][1]?.state === 'completed')
+        const streamed = [...engine.transactions.values()][1]
+        expect(stream.body).toContain('data: done\n\n')
+        expect(streamed.responseBody).toBe(stream.body.slice(0, 128))
+        expect(streamed.truncated).toBe(true)
+    })
+    it('applies body limits to composed requests without truncating the sent request', async () => {
+        store.settings.maxRequestBodyBytes = 3
+        store.settings.maxResponseBodyBytes = 7
+        const t = await engine.compose({
+            url: `http://127.0.0.1:${originPort}/composed-limit`,
+            method: 'POST',
+            headers: {},
+            body: 'all of this reaches the server'
+        })
+        expect(hits[0].body).toBe('all of this reaches the server')
+        expect(t.requestBody).toBe('all')
+        expect(t.responseBody).toHaveLength(7)
+        expect(t.truncated).toBe(true)
+    })
     it('captures HTTP through the local SOCKS5 endpoint and closes it on stop', async () => {
         await engine.stop()
         const socksPort = port
@@ -753,6 +819,46 @@ describe('real proxy traffic', () => {
         ws.close()
         await once(ws, 'close')
         wss.close()
+    })
+    it('bounds captured WebSocket payloads per direction while forwarding later frames', async () => {
+        store.settings.maxRequestBodyBytes = 4
+        store.settings.maxResponseBodyBytes = 7
+        const wss = new WebSocketServer({ server: origin })
+        wss.on('connection', (socket) =>
+            socket.on('message', (data) => socket.send(data.toString()))
+        )
+        const ws = new WebSocket(`ws://127.0.0.1:${port}/socket`, {
+            headers: { host: `127.0.0.1:${originPort}` }
+        })
+        try {
+            await once(ws, 'open')
+            for (const payload of ['abcdefghijk', 'still forwarded']) {
+                const received = once(ws, 'message')
+                ws.send(payload)
+                expect((await received)[0].toString()).toBe(payload)
+            }
+            await waitFor(() =>
+                [...engine.transactions.values()].some((t) => t.responseBytes === 26)
+            )
+            const t = [...engine.transactions.values()].find((t) => t.protocol === 'WebSocket')!
+            expect(
+                t.frames
+                    .filter((frame) => frame.direction === 'send')
+                    .map((frame) => frame.body)
+                    .join('')
+            ).toBe('abcd')
+            expect(
+                t.frames
+                    .filter((frame) => frame.direction === 'receive')
+                    .map((frame) => frame.body)
+                    .join('')
+            ).toBe('abcdefg')
+            expect(t.truncated).toBe(true)
+        } finally {
+            ws.close()
+            await once(ws, 'close')
+            wss.close()
+        }
     })
     it('delays WebSocket upstream connection and shapes ordered frames in both directions', async () => {
         store.rules = [

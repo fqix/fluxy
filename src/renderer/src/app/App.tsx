@@ -325,18 +325,12 @@ export function App() {
                     const transactions = [...s.transactions]
                     if (index < 0) transactions.push(event.transaction)
                     else transactions[index] = event.transaction
-                    const retained = new Set(
-                        transactions
-                            .filter((t) => t.state !== 'paused')
-                            .slice(-s.settings.maxEntries)
-                            .map((t) => t.id)
-                    )
-                    return {
-                        ...s,
-                        transactions: transactions.filter(
-                            (t) => t.state === 'paused' || retained.has(t.id)
-                        )
+                    while (transactions.length > s.settings.maxEntries) {
+                        const oldest = transactions.findIndex((t) => t.state !== 'paused')
+                        if (oldest < 0) break
+                        transactions.splice(oldest, 1)
                     }
+                    return { ...s, transactions }
                 })
                 return
             }

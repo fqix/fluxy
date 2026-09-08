@@ -59,6 +59,8 @@ export interface TunStatus {
     splitDNS?: boolean
     error?: string
 }
+export const MAX_CAPTURE_ENTRIES = 10000
+export const MAX_CAPTURE_BODY_BYTES = 2 * 1024 * 1024
 export const settingsSchema = z.object({
     updates: z
         .object({
@@ -80,7 +82,19 @@ export const settingsSchema = z.object({
     autoStart: z.boolean().default(false),
     autoSystemProxy: z.boolean().default(true),
     theme: z.enum(['system', 'light', 'dark']).default('system'),
-    maxEntries: z.number().int().min(100).max(50000).default(10000),
+    maxEntries: z.number().int().min(100).max(MAX_CAPTURE_ENTRIES).default(MAX_CAPTURE_ENTRIES),
+    maxRequestBodyBytes: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_CAPTURE_BODY_BYTES)
+        .default(MAX_CAPTURE_BODY_BYTES),
+    maxResponseBodyBytes: z
+        .number()
+        .int()
+        .min(0)
+        .max(MAX_CAPTURE_BODY_BYTES)
+        .default(MAX_CAPTURE_BODY_BYTES),
     ssl: z.boolean().default(true),
     noCache: z.boolean().default(false),
     fullBypassHosts: z.array(z.string().min(1).max(255)).max(1000).default([]),

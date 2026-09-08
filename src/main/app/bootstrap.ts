@@ -691,6 +691,7 @@ exec /bin/zsh -i
         }
         store.settings = next
         store.persist()
+        engine.enforceEntryLimit()
         nativeTheme.themeSource = next.theme
         emit({ type: 'state' })
     })
