@@ -282,6 +282,13 @@ export function App() {
             ),
         []
     )
+    const clearTraffic = async () => {
+        await window.fluxy.clear()
+        setWorkspaces((ws) => ws.map((w) => ({ ...w, selected: [] })))
+        setContextMenu(undefined)
+        setScrollTop(0)
+        if (table.current) table.current.scrollTop = 0
+    }
     const openTool = useCallback((name: string) => {
         if (name === 'Compose') setComposeTransaction(undefined)
         setTool(name)
@@ -731,8 +738,7 @@ export function App() {
                 void run(importProject)
                 break
             case 'new-session':
-                void run(() => window.fluxy.clear())
-                patch({ selected: [] })
+                void run(clearTraffic)
                 break
             case 'focus-url':
                 patch({ searchBy: 'URL' })
@@ -853,11 +859,11 @@ export function App() {
                 void run(() => window.fluxy.record(!snapshot.recording))
                 break
             case 'clear':
-                void run(() => window.fluxy.clear())
+                void run(clearTraffic)
                 break
             case 'clear-filters':
                 void run(async () => {
-                    await window.fluxy.clear()
+                    await clearTraffic()
                     patch({
                         query: '',
                         scope: 'All Traffic',
@@ -1420,6 +1426,14 @@ export function App() {
                         ))}
                     </nav>
                     <div className="search-row">
+                        <Button
+                            title="Clear current request records"
+                            disabled={busy > 0 || liveTransactions.length === 0}
+                            onClick={() => void run(clearTraffic)}
+                        >
+                            <Trash2 size={13} />
+                            Clear
+                        </Button>
                         <span
                             title={snapshot.recording ? 'Recording enabled' : 'Recording paused'}
                             className={`capture-check ${snapshot.recording ? '' : 'paused'}`}
@@ -1797,7 +1811,6 @@ export function App() {
                         </>
                     )}
                     <footer className="statusbar">
-                        <Button onClick={() => void run(() => window.fluxy.clear())}>Clear</Button>
                         <Button
                             className={autoSelect ? 'selected' : ''}
                             onClick={() => setAutoSelect((v) => !v)}
