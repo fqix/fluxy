@@ -1,0 +1,21 @@
+name: Windows Installer Smoke
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test published installer in Windows PowerShell and PowerShell 7
+        shell: pwsh
+        run: ./tools/install/smoke-windows.ps1
+      - name: Upload installation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-installer-smoke
+          path: test-results/windows-installer/
+          if-no-files-found: ignore
