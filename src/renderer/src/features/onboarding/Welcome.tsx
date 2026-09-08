@@ -98,7 +98,7 @@ export function Welcome({
     const rows = [
         {
             title: 'Helper & Certificate Setup',
-            detail: 'Install Helper and trust the Fluxy root certificate using system authorization. On Linux, Fluxy also configures existing Chrome and Firefox profiles. Completed steps are reused when you retry.',
+            detail: 'Set up Helper and the HTTPS certificate.',
             icon: Wrench,
             done: setupReady,
             error: certificate?.error || certificate?.browserError,
@@ -131,7 +131,7 @@ export function Welcome({
             capture: true,
             title: isTun ? 'TUN Capture' : 'Socks Proxy',
             detail: isTun
-                ? 'Complete setup before starting TUN. Starting capture does not request installation authorization. On macOS, Fluxy keeps TUN enabled alongside Mihomo / sing-box using its own Fake IP DNS. Stopping TUN removes Fluxy’s split DNS and routes, restoring the previous DNS behavior.'
+                ? 'Capture selected domains across apps. Complete setup above to enable TUN on macOS.'
                 : 'Connect your app to Fluxy’s local SOCKS5 endpoint to capture HTTP and HTTPS traffic. HTTPS inspection requires trusting the root certificate. Supports TCP; UDP relay is not available.',
             icon: Network,
             done:
@@ -323,12 +323,7 @@ export function Welcome({
                                                     onChange={(e) => setDomains(e.target.value)}
                                                 />
                                                 <p id="welcome-capture-domains-hint">
-                                                    Required, macOS only. Enter at least one valid
-                                                    domain, one per line, including subdomains. Use
-                                                    domain names without a URL, IP address, port or
-                                                    path. Use automatic exit settings and leave
-                                                    route CIDRs empty in TUN settings. Enable saves
-                                                    these domains before starting.
+                                                    One domain per line; subdomains included.
                                                 </p>
                                                 <p
                                                     id="welcome-capture-domains-error"
@@ -373,8 +368,7 @@ export function Welcome({
                         </p>
                     )}
                     <p className="muted">
-                        After enabling capture, Fluxy remembers this mode and starts it
-                        automatically on the next launch. You can turn this off in Settings.
+                        Enabling capture also turns on auto-start. Change this in Settings.
                     </p>
                     {manual && (
                         <p className="welcome-manual">
