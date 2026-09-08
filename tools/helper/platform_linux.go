@@ -106,11 +106,7 @@ func trustCertificate(cert *x509.Certificate, install bool, base string) error {
 	sum := sha256.Sum256(cert.Raw)
 	path := filepath.Join(directory, "fluxy-"+hex.EncodeToString(sum[:])+".crt")
 	if install {
-		// Root owns the trust-store directory; never follow a substituted symlink.
-		if info, err := os.Lstat(path); err == nil && info.Mode()&os.ModeSymlink != 0 {
-			return errors.New("unsafe CA path")
-		}
-		if err := os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}), 0644); err != nil {
+		if err := writePublicCertificate(path, cert); err != nil {
 			return err
 		}
 	} else {
