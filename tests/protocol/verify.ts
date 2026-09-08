@@ -463,10 +463,11 @@ try {
                         name: 'Streaming headers',
                         enabled: true,
                         kind: 'breakpoint',
-                        pattern: '*',
+                        pattern: `*${service.bidi.path}`,
                         phase: 'both'
                     })
                 ]
+                const previous = new Set(proxy.engine.transactions.keys())
                 const call = client.makeBidiStreamRequest(
                     service.bidi.path,
                     serialize,
@@ -483,7 +484,11 @@ try {
                         const transaction = await eventually(
                             () =>
                                 [...proxy.engine.transactions.values()].find(
-                                    (t) => t.state === 'paused' && t.breakpointPhase === phase
+                                    (t) =>
+                                        !previous.has(t.id) &&
+                                        new URL(t.url).pathname === service.bidi.path &&
+                                        t.state === 'paused' &&
+                                        t.breakpointPhase === phase
                                 ),
                             Boolean,
                             `${phase} streaming breakpoint`

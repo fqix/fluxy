@@ -23,7 +23,8 @@ the lockfile, generated source, installed dependencies and the child entrypoint.
 `core:build`, development, tests and packaging build this runtime automatically.
 Electron packages it under `resources/whistle` on macOS, Linux and Windows,
 including x64 and ARM64 builds. No separately installed Node or Whistle is needed.
-The embedded runtime disables Whistle's Web UI and plugins; Fluxy is its control
+The embedded runtime disables Whistle's Web UI, plugins and background version
+checks for Whistle, Whistle Client and plugins; Fluxy is its control
 surface. Upstream TLS verification remains enabled.
 
 ## Policy and streams
