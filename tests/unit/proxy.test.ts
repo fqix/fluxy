@@ -750,6 +750,8 @@ describe('real proxy traffic', () => {
     })
     it('saves and reloads traffic through the persistent session store', async () => {
         await request()
+        // Client EOF can arrive before the capture completion event over IPC.
+        await waitFor(() => [...engine.transactions.values()][0]?.state === 'completed')
         store.saveSession('Regression', [...engine.transactions.values()])
         const session = store.sessions()[0]
         expect(session.name).toBe('Regression')

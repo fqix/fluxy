@@ -89,9 +89,11 @@ jobs:
       - run: go test -race -tags=with_gvisor ./...
         working-directory: tools/sing-box
       - run: npm run build
-      - run: npx playwright test
+      - name: Playwright desktop tests (macOS / Windows)
+        run: npx playwright test
         if: runner.os != 'Linux'
-      - run: xvfb-run --auto-servernum npx playwright test
+      - name: Playwright desktop tests (Linux / Xvfb)
+        run: xvfb-run --auto-servernum npx playwright test
         if: runner.os == 'Linux'
       - run: npm run package
         env:
