@@ -180,6 +180,9 @@ type session struct {
 	release       func()
 	interfaceName string
 	dnsCleanup    func() error
+	output        *coreOutput
+	password      string
+	exitError     string
 }
 
 func (s *session) running() bool {
@@ -187,7 +190,8 @@ func (s *session) running() bool {
 		return false
 	}
 	select {
-	case <-s.done:
+	case err := <-s.done:
+		s.exitError = s.output.failure("TUN core exited unexpectedly", err, s.password)
 		s.child = nil
 		s.input.Close()
 		s.release()
@@ -246,6 +250,7 @@ func (s *session) start(raw json.RawMessage) error {
 	if err := s.stop(); err != nil {
 		return err
 	}
+	s.exitError = ""
 	if _, err := net.InterfaceByName(p.InterfaceName); err == nil {
 		return errors.New("TUN interface already exists")
 	}
@@ -262,11 +267,15 @@ func (s *session) start(raw json.RawMessage) error {
 	defer cancel()
 	check := exec.CommandContext(ctx, core, "check", "-c", path)
 	check.Env = cleanEnv()
+	checkOutput := &coreOutput{}
+	check.Stdout, check.Stderr = checkOutput, checkOutput
 	if err = check.Run(); err != nil {
-		return fmt.Errorf("core configuration check: %w", err)
+		return errors.New(checkOutput.failure("core configuration check failed", err, p.Password))
 	}
 	child := exec.Command(core, "run", "-c", path)
 	child.Env = append(cleanEnv(), "FLUXY_HELPER_STDIN=1")
+	output := &coreOutput{}
+	child.Stdout, child.Stderr = output, output
 	input, err := child.StdinPipe()
 	if err != nil {
 		return err
@@ -285,14 +294,20 @@ func (s *session) start(raw json.RawMessage) error {
 	s.child = child
 	s.input = input
 	s.release = release
-	s.done = make(chan error, 1)
+	done := make(chan error, 1)
+	s.done = done
+	s.output = output
+	s.password = p.Password
 	s.interfaceName = p.InterfaceName
-	go func() { s.done <- child.Wait() }()
+	go func() { done <- child.Wait() }()
 	if p.SplitDNS != nil && !helperTesting {
 		if err = waitSplitDNSReady(p.SplitDNS.Domains); err == nil {
 			s.dnsCleanup, err = startSplitDNS(p.InterfaceName, p.SplitDNS.Domains)
 		}
 		if err != nil {
+			if !s.running() && s.exitError != "" {
+				err = errors.Join(err, errors.New(s.exitError))
+			}
 			stopErr := s.stop()
 			return errors.Join(err, stopErr)
 		}
@@ -361,7 +376,11 @@ func serveConnection(ctx context.Context, c net.Conn, p pairing, base string) {
 		default:
 			err = errors.New("unsupported helper method")
 		}
-		reply := map[string]any{"id": req.ID, "result": map[string]any{"buildID": p.BuildID, "tunRunning": s.running()}}
+		running := s.running()
+		if req.Method == "tun.start" && err == nil && !running {
+			err = errors.New(s.exitError)
+		}
+		reply := map[string]any{"id": req.ID, "result": map[string]any{"buildID": p.BuildID, "tunRunning": running, "tunError": s.exitError}}
 		if err != nil {
 			reply["error"] = err.Error()
 		}

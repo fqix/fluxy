@@ -21,6 +21,7 @@ import { tunSettingsSchema } from '../../src/shared/contracts/model'
 import { ensureCertificate } from '../../src/main/certificates/certificates'
 import { connect } from '../../src/main/tun/tun-bridge'
 import { unusedPort } from '../../src/main/tun/tun'
+import net from 'node:net'
 const execute = promisify(cp.execFile)
 const production = join(process.cwd(), 'build/electron-helper/fluxy-helper')
 const core = join(process.cwd(), 'build/electron-core/fluxy-core')
@@ -189,6 +190,48 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             .toBe(true)
         return { root, token, port, worker, closed }
     }
+    it('returns the real core startup error through RPC and allows a clean retry', async () => {
+        const { root, token, port, worker, closed } = await server()
+        const rpc = new HelperRPC(join(root, 'helper.sock'), token)
+        const occupied = net.createServer().listen(port, '127.0.0.1')
+        await once(occupied, 'listening')
+        try {
+            const p = {
+                ...params(),
+                bridgePort: await unusedPort(),
+                egressPort: await unusedPort()
+            }
+            // Configuration checking succeeds, but the real core fails when binding.
+            await rpc.request('tun.start', p).catch((error) => {
+                expect(String(error)).toContain('address already in use')
+            })
+            await expect.poll(async () => (await rpc.request('status')).tunRunning).toBe(false)
+            const reply = await rpc.request('status')
+            expect(reply.tunError).toContain('exit status 1')
+            expect(reply.tunError).toContain('address already in use')
+            expect(reply.tunError).not.toContain(p.password)
+            await new Promise<void>((resolve) => occupied.close(() => resolve()))
+            await rpc.request('tun.start', p)
+            await expect
+                .poll(async () => {
+                    try {
+                        ;(await connect(port)).destroy()
+                        return true
+                    } catch {
+                        return false
+                    }
+                })
+                .toBe(true)
+            expect((await rpc.request('status')).tunError).toBe('')
+            await rpc.request('tun.stop')
+            expect((await rpc.request('status')).tunError).toBe('')
+        } finally {
+            occupied.close()
+            rpc.close()
+            worker.kill('SIGTERM')
+            await closed
+        }
+    })
     it('authenticates requests, denies arbitrary operations, and stops the real core on disconnect', async () => {
         const serverState = await server()
         const { root, token, port, worker, closed } = serverState

@@ -21,6 +21,7 @@ export const helperSocket = helperEndpoint()
 interface Reply {
     buildID: string
     tunRunning: boolean
+    tunError?: string
 }
 interface Manifest {
     version: number
@@ -79,7 +80,9 @@ export class HelperRPC {
                         if (message.error) pending.reject(new Error(String(message.error)))
                         else if (
                             typeof message.result?.buildID !== 'string' ||
-                            typeof message.result?.tunRunning !== 'boolean'
+                            typeof message.result?.tunRunning !== 'boolean' ||
+                            (message.result?.tunError !== undefined &&
+                                typeof message.result.tunError !== 'string')
                         )
                             pending.reject(new Error('Invalid helper reply'))
                         else pending.resolve(message.result)
@@ -330,7 +333,9 @@ export class HelperService {
                 .then((reply) => {
                     if (this.tunActive && !reply.tunRunning) {
                         this.tunActive = false
-                        this.onTunFailure?.(new Error('Helper TUN core exited unexpectedly'))
+                        this.onTunFailure?.(
+                            new Error(reply.tunError || 'Helper TUN core exited unexpectedly')
+                        )
                     }
                 })
                 .catch(() => {})
@@ -513,7 +518,13 @@ export class HelperService {
         try {
             await this.ensureInstalled()
             const reply = await (await this.client()).request(method, params, timeout)
-            if (method === 'tun.start') this.tunActive = true
+            if (method === 'tun.start') {
+                if (!reply.tunRunning)
+                    throw new Error(
+                        reply.tunError || 'Helper TUN core exited before becoming ready'
+                    )
+                this.tunActive = true
+            }
             return reply
         } finally {
             this.operations--
