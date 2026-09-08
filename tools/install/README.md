@@ -10,7 +10,7 @@ curl --fail --location https://raw.githubusercontent.com/fqix/fluxy/main/install
 
 macOS installs the application to `~/Applications/Fluxy.app`. Existing Fluxy installations in that location are replaced; preferences are preserved. Quit Fluxy before updating. The script verifies the app identifier and code-signature integrity. Releases built without Apple credentials use ad-hoc signing and are not notarized. If Gatekeeper blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**. The script reports the assessment result without changing Gatekeeper settings.
 
-Linux supports **deb and rpm only**. Debian/Ubuntu use `apt-get`; Fedora/RHEL and compatible distributions use `dnf` or `yum`; openSUSE uses `zypper`. The script requests sudo for the package-manager step and rechecks a root-owned copy of the package before installation. System package managers resolve runtime dependencies. No AppImage is produced or installed.
+Linux supports **deb and rpm only**. Debian/Ubuntu use `apt-get`; Fedora/RHEL and compatible distributions use `dnf` or `yum`; openSUSE uses `zypper`. The script requests sudo for the package-manager step and rechecks a root-owned copy of the package before installation. System package managers resolve runtime dependencies.
 
 With a local checkout, inspect or select the installation:
 

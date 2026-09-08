@@ -18,7 +18,7 @@ The release matrix covers **macOS x64/ARM64, Linux x64/ARM64, and Windows x64/AR
 curl --fail --location https://raw.githubusercontent.com/fqix/fluxy/main/install.sh | bash
 ```
 
-On macOS, the app is installed to `~/Applications/Fluxy.app`. On Linux, the script selects **deb or rpm** for your package manager and requests sudo when installing. No AppImage is used.
+On macOS, the app is installed to `~/Applications/Fluxy.app`. On Linux, the script selects **deb or rpm** for your package manager and requests sudo when installing.
 
 macOS builds without Apple credentials use ad-hoc signing and are not notarized. If macOS blocks the first launch, use **System Settings → Privacy & Security → Open Anyway**.
 

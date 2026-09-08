@@ -16,7 +16,7 @@ Fluxy 是使用 **Electron、TypeScript 和 React** 构建的网络调试桌面�
 curl --fail --location https://raw.githubusercontent.com/fqix/fluxy/main/install.sh | bash
 ```
 
-macOS 安装到 `~/Applications/Fluxy.app`。Linux 根据包管理器选择 **deb 或 rpm**，安装时请求 sudo 权限，不使用 AppImage。
+macOS 安装到 `~/Applications/Fluxy.app`。Linux 根据包管理器选择 **deb 或 rpm**，安装时请求 sudo 权限。
 
 未配置 Apple 凭据时，macOS 发布包采用临时签名、不做公证。首次打开如被系统阻止，请在 **系统设置 → 隐私与安全 → 仍要打开** 中手动放行。
 
