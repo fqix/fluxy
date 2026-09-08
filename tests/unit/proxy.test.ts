@@ -761,7 +761,8 @@ describe('real proxy traffic', () => {
 async function waitFor(predicate: () => boolean) {
     const start = Date.now()
     while (!predicate()) {
-        if (Date.now() - start > 5000) throw new Error('Timed out')
+        const timeout = process.platform === 'win32' ? 45000 : 5000
+        if (Date.now() - start > timeout) throw new Error('Timed out')
         await new Promise((r) => setTimeout(r, 10))
     }
 }

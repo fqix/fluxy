@@ -141,7 +141,7 @@ export class ProcessResolver {
                     ? linuxConnections(port, this.procRoot)
                     : this.platform === 'win32'
                       ? exec('netstat.exe', ['-ano'], {
-                            timeout: 2000,
+                            timeout: 10000,
                             maxBuffer: 4 * 1024 * 1024
                         }).then((r) => parseWindowsConnections(r.stdout))
                       : exec('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-Fpcn'], {
@@ -169,8 +169,13 @@ export class ProcessResolver {
                                 '-Command',
                                 `[Console]::OutputEncoding = [Text.UTF8Encoding]::new(); (Get-Process -Id ${owner.pid} -ErrorAction Stop).Path`
                             ],
-                            // Windows PowerShell's first launch can exceed three seconds.
-                            { timeout: 10000, maxBuffer: 16384, encoding: 'utf8' }
+                            // Allow for Windows PowerShell cold starts on busy machines.
+                            {
+                                timeout: 30000,
+                                maxBuffer: 16384,
+                                encoding: 'utf8',
+                                windowsHide: true
+                            }
                         )
                     ).stdout.trim()
                   : (

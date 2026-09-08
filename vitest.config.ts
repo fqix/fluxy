@@ -8,5 +8,8 @@ export default defineConfig({
             '@assets': resolve('resources')
         }
     },
-    test: { include: ['tests/unit/**/*.test.ts'], testTimeout: 20000 }
+    test: {
+        include: ['tests/unit/**/*.test.ts'],
+        testTimeout: process.platform === 'win32' ? 60000 : 20000
+    }
 })
