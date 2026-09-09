@@ -3,16 +3,22 @@ import { mkdtemp, rm, access } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { EventEmitter } from 'node:events'
+import { spawn } from 'node:child_process'
 import { Store } from '../../src/main/storage/store'
 import { SystemProxy } from '../../src/main/system/system-proxy'
 import * as desktop from '../../src/main/system/desktop-proxy'
 
+vi.mock('../../src/main/tun/native-windows', () => ({
+    nativeWindowsHelperPath: vi.fn(async () => 'fixture-helper.exe'),
+    nativeWindowsQuery: vi.fn()
+}))
 vi.mock('node:child_process', async (original) => ({
     ...(await original<typeof import('node:child_process')>()),
     spawn: vi.fn(() => Object.assign(new EventEmitter(), { unref: vi.fn(), kill: vi.fn() }))
 }))
 let directory: string
 beforeEach(async () => {
+    vi.clearAllMocks()
     directory = await mkdtemp(join(tmpdir(), 'fluxy-system-proxy-unit-'))
 })
 afterEach(async () => {
@@ -61,6 +67,16 @@ describe('system proxy backup lifecycle', () => {
             await proxy.set(true)
             expect(proxy.enabled).toBe(true)
             expect(current).not.toEqual(initial)
+            expect(spawn).toHaveBeenCalledWith(
+                process.execPath,
+                [
+                    expect.stringMatching(/watchdog\.js$/),
+                    directory,
+                    String(process.pid),
+                    platform === 'win32' ? 'fixture-helper.exe' : ''
+                ],
+                expect.objectContaining({ detached: true, stdio: 'ignore' })
+            )
             const restarted = new SystemProxy(store, platform)
             await restarted.recover()
             expect(current).toEqual(initial)
