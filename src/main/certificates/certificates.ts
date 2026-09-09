@@ -1,3 +1,4 @@
+import { nativeWindowsQuery } from '../tun/native-windows'
 import { supportedHelperPlatform } from '../system/helper-platform'
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -117,21 +118,10 @@ export async function certificateStatus(
                 await promisify(execFile)('openssl', ['verify', path], { timeout: 10000 })
                 status.trusted = true
             } else if (process.platform === 'win32') {
-                const fingerprint = new X509Certificate(readFileSync(path)).fingerprint256.replace(
-                    /:/g,
-                    ''
-                )
-                const { stdout } = await promisify(execFile)(
-                    'powershell.exe',
-                    [
-                        '-NoProfile',
-                        '-NonInteractive',
-                        '-Command',
-                        `$ErrorActionPreference='Stop'; $store=New-Object System.Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine'); $store.Open('ReadOnly'); try { $sha=[Security.Cryptography.SHA256]::Create(); $found=@($store.Certificates | Where-Object { [BitConverter]::ToString($sha.ComputeHash($_.RawData)).Replace('-','') -eq '${fingerprint}' }).Count -gt 0; $found | ConvertTo-Json } finally { $store.Close() }`
-                    ],
-                    { timeout: 30000, windowsHide: true }
-                )
-                status.trusted = JSON.parse(stdout) === true
+                status.trusted =
+                    (await nativeWindowsQuery('certificate-status', {
+                        der: new X509Certificate(readFileSync(path)).raw.toString('base64')
+                    })) === true
             }
         } catch (error) {
             const failure = error as { stdout?: string; stderr?: string }

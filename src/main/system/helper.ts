@@ -11,6 +11,8 @@ import {
     supportedHelperPlatform,
     helperEndpoint,
     authorizePortable,
+    authorizeWindowsSetup,
+    windowsInstallationRequest,
     currentSID,
     portableInstallationScript,
     portableUninstallationScript
@@ -175,6 +177,7 @@ export function authorizeInstallation(
     helperPath: string,
     certificate?: Buffer
 ): Promise<void> {
+    if (process.platform === 'win32') return authorizeWindowsSetup(helperPath, command)
     if (process.platform !== 'darwin') return authorizePortable(command)
     return new Promise<void>((resolve, reject) => {
         const worker = spawn(helperPath, ['authorize-desktop'], {
@@ -412,7 +415,9 @@ export class HelperService {
                 join(stage, 'pairing.json'),
                 JSON.stringify({
                     uid: process.getuid?.() ?? -1,
-                    ...(process.platform === 'win32' ? { sid: await currentSID() } : {}),
+                    ...(process.platform === 'win32'
+                        ? { sid: await currentSID(this.helperPath) }
+                        : {}),
                     token,
                     buildID: manifest.buildID,
                     caller
@@ -439,7 +444,9 @@ export class HelperService {
             const command =
                 process.platform === 'darwin'
                     ? `/bin/sh -c ${shellQuote(installationScript(stage, manifest, pairingHash, digest(await readFile(join(stage, 'service.plist')))))}`
-                    : portableInstallationScript(stage, manifest, pairingHash)
+                    : process.platform === 'win32'
+                      ? windowsInstallationRequest(stage, manifest, pairingHash)
+                      : portableInstallationScript(stage, manifest, pairingHash)
             await this.authorize(command, certificate)
             let lastError: unknown
             for (let attempt = 0; attempt < 40; attempt++) {
@@ -497,7 +504,9 @@ export class HelperService {
             await this.authorize(
                 process.platform === 'darwin'
                     ? `/bin/sh -c ${shellQuote(uninstallationScript())}`
-                    : portableUninstallationScript()
+                    : process.platform === 'win32'
+                      ? JSON.stringify({ action: 'uninstall' })
+                      : portableUninstallationScript()
             )
             // Keep the pairing token on cancellation/failure so repair still works.
             await rm(join(this.directory, 'helper-client.json'), { force: true })

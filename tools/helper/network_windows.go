@@ -1,16 +1,53 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"golang.org/x/sys/windows"
 	"net"
 	"sort"
+	"syscall"
 	"unsafe"
 )
 
 func platformNetworkCommand(command string, data []byte) (any, error) {
 	switch command {
+	case "certificate-status":
+		var request struct {
+			DER string `json:"der"`
+		}
+		if err := decode(data, &request); err != nil {
+			return nil, err
+		}
+		raw, err := base64.StdEncoding.DecodeString(request.DER)
+		if err != nil || len(raw) == 0 {
+			return nil, errors.New("invalid certificate DER")
+		}
+		name, _ := windows.UTF16PtrFromString("ROOT")
+		store, err := windows.CertOpenStore(windows.CERT_STORE_PROV_SYSTEM_W, 0, 0, windows.CERT_SYSTEM_STORE_LOCAL_MACHINE|windows.CERT_STORE_READONLY_FLAG|windows.CERT_STORE_OPEN_EXISTING_FLAG, uintptr(unsafe.Pointer(name)))
+		if err != nil {
+			return nil, err
+		}
+		defer windows.CertCloseStore(store, 0)
+		var previous *windows.CertContext
+		for {
+			cert, err := windows.CertEnumCertificatesInStore(store, previous)
+			if err != nil {
+				if errors.Is(err, syscall.Errno(windows.CRYPT_E_NOT_FOUND)) {
+					return false, nil
+				}
+				return nil, err
+			}
+			previous = cert
+			if bytes.Equal(unsafe.Slice(cert.EncodedCert, cert.Length), raw) {
+				windows.CertFreeCertificateContext(cert)
+				return true, nil
+			}
+		}
+	case "user-sid":
+		return nativeSID()
 	case "dns-status":
 		var request struct {
 			InterfaceName string `json:"interfaceName"`

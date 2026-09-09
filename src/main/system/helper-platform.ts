@@ -14,9 +14,6 @@ export const helperEndpoint = (platform = process.platform) =>
           : `/private/var/run/${id}.sock`
 export const executableName = (name: string, platform = process.platform) =>
     name + (platform === 'win32' ? '.exe' : '')
-export const psQuote = (value: string) => `'${value.replace(/'/g, "''")}'`
-export const encodedPowerShell = (script: string) =>
-    Buffer.from(script, 'utf16le').toString('base64')
 export async function authorizePortable(script: string, platform = process.platform) {
     const execute = (file: string, args: string[]) =>
         new Promise<void>((resolve, reject) => {
@@ -47,32 +44,49 @@ export async function authorizePortable(script: string, platform = process.platf
         })
     if (platform === 'linux') {
         await execute('/usr/bin/pkexec', ['/bin/sh', '-c', script])
-    } else if (platform === 'win32') {
-        const encoded = encodedPowerShell(script)
-        await execute('powershell.exe', [
-            '-NoProfile',
-            '-NonInteractive',
-            '-EncodedCommand',
-            encodedPowerShell(
-                `$ErrorActionPreference='Stop'; $p=Start-Process -FilePath "$PSHOME\\powershell.exe" -Verb RunAs -Wait -PassThru -ArgumentList '-NoProfile -NonInteractive -EncodedCommand ${encoded}'; if ($p.ExitCode -ne 0) { throw 'Helper authorization or installation failed' }`
-            )
-        ])
     } else throw new Error('Unsupported helper platform')
 }
-export async function currentSID() {
-    const { stdout } = await promisify(execFile)(
-        'powershell.exe',
-        [
-            '-NoProfile',
-            '-NonInteractive',
-            '-Command',
-            '[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'
-        ],
-        { timeout: 5000, windowsHide: true }
-    )
-    const sid = stdout.trim()
-    if (!/^S-1-\d+(?:-\d+)+$/.test(sid)) throw new Error('Cannot resolve the desktop user SID')
+export async function currentSID(helperPath: string) {
+    const { stdout } = await promisify(execFile)(helperPath, ['user-sid'], {
+        timeout: 10000,
+        windowsHide: true
+    })
+    const sid = JSON.parse(stdout)
+    if (typeof sid !== 'string' || !/^S-1-\d+(?:-\d+)+$/.test(sid))
+        throw new Error('Cannot resolve the desktop user SID')
     return sid
+}
+export function windowsInstallationRequest(stage: string, hashes: Hashes, pairingSHA256: string) {
+    for (const hash of [hashes.helperSHA256, hashes.coreSHA256, pairingSHA256])
+        if (!/^[a-f0-9]{64}$/.test(hash)) throw new Error('Invalid installation checksum')
+    return JSON.stringify({
+        action: 'install',
+        stage,
+        helperSHA256: hashes.helperSHA256,
+        coreSHA256: hashes.coreSHA256,
+        pairingSHA256
+    })
+}
+export function authorizeWindowsSetup(helperPath: string, request: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const child = spawn(helperPath, ['setup-native'], {
+            windowsHide: true,
+            stdio: ['pipe', 'pipe', 'pipe']
+        })
+        let output = ''
+        child.stderr.on('data', (data: Buffer) => {
+            output = (output + data.toString()).slice(-16384)
+        })
+        child.stdout.resume()
+        child.once('error', reject)
+        child.once('close', (code) =>
+            code === 0
+                ? resolve()
+                : reject(new Error(output.trim() || 'Native Helper setup failed'))
+        )
+        child.stdin.on('error', reject)
+        child.stdin.end(request)
+    })
 }
 type Hashes = { helperSHA256: string; coreSHA256: string }
 export function portableInstallationScript(
@@ -133,58 +147,7 @@ FLUXY_SERVICE
 chmod 644 /etc/systemd/system/${id}.service
 systemctl daemon-reload
 systemctl enable --now ${id}.service`
-    if (platform !== 'win32') throw new Error('Unsupported helper platform')
-    return `$ErrorActionPreference='Stop'
-$base=Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'FluxyHelper'
-$stage=Join-Path ([Environment]::GetFolderPath('ProgramFiles')) ('FluxyInstall-'+[Guid]::NewGuid().ToString('N'))
-function Protect($path) {
- $acl=New-Object System.Security.AccessControl.DirectorySecurity
- $acl.SetAccessRuleProtection($true,$false)
- foreach ($sid in @('S-1-5-18','S-1-5-32-544')) {
-  $identity=New-Object System.Security.Principal.SecurityIdentifier($sid)
-  $rule=New-Object System.Security.AccessControl.FileSystemAccessRule($identity,'FullControl','ContainerInherit,ObjectInherit','None','Allow')
-  $acl.AddAccessRule($rule)
- }
- Set-Acl -LiteralPath $path -AclObject $acl
-}
-New-Item -ItemType Directory -Path $stage | Out-Null
-Protect $stage
-try {
-${[
-    ['fluxy-helper', hashes.helperSHA256],
-    ['fluxy-core', hashes.coreSHA256],
-    ['pairing.json', pairingHash]
-]
-    .map(
-        ([
-            name,
-            hash
-        ]) => `Copy-Item -LiteralPath ${psQuote(join(stage, name))} -Destination (Join-Path $stage '${name.endsWith('.json') ? name : name + '.exe'}')
- if ((Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $stage '${name.endsWith('.json') ? name : name + '.exe'}')).Hash -ne '${hash}') { throw 'Helper integrity check failed' }`
-    )
-    .join('\n')}
- $service=Get-Service -Name '${id}' -ErrorAction SilentlyContinue
- if ($service) {
-  $serviceInfo=Get-CimInstance Win32_Service -Filter "Name='${id}'"
-  $worker=if ($serviceInfo.ProcessId) { Get-Process -Id $serviceInfo.ProcessId -ErrorAction SilentlyContinue } else { $null }
-  Stop-Service -Name '${id}'
-  $service.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(30))
-  if ($worker -and !$worker.WaitForExit(30000)) { throw 'Helper process is still stopping' }
- }
- if (Test-Path -LiteralPath $base) {
-  if ((Get-Item -LiteralPath $base).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Unsafe helper directory' }
-  Remove-Item -LiteralPath $base -Recurse -Force
- }
- Move-Item -LiteralPath $stage -Destination $base
- $binary='"'+(Join-Path $base 'fluxy-helper.exe')+'"'
- if ($service) {
-  $instance=Get-CimInstance Win32_Service -Filter "Name='${id}'"
-  $result=Invoke-CimMethod -InputObject $instance -MethodName Change -Arguments @{PathName=$binary;StartMode='Automatic'}
-  if ($result.ReturnValue -ne 0) { throw 'Cannot update helper service' }
- }
- else { New-Service -Name '${id}' -BinaryPathName $binary -DisplayName 'Fluxy Helper' -StartupType Automatic | Out-Null }
- Start-Service -Name '${id}'
-} finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }`
+    throw new Error('Script setup is only supported on Linux')
 }
 export function portableUninstallationScript(platform = process.platform) {
     if (platform === 'linux')
@@ -199,23 +162,5 @@ systemctl disable ${id}.service 2>/dev/null || true
 rm -f /etc/systemd/system/${id}.service
 systemctl daemon-reload
 rm -rf /usr/local/lib/fluxy-helper /run/${id}`
-    if (platform !== 'win32') throw new Error('Unsupported helper platform')
-    return `$ErrorActionPreference='Stop'
-$service=Get-Service -Name '${id}' -ErrorAction SilentlyContinue
-if ($service) {
- $serviceInfo=Get-CimInstance Win32_Service -Filter "Name='${id}'"
- $worker=if ($serviceInfo.ProcessId) { Get-Process -Id $serviceInfo.ProcessId -ErrorAction SilentlyContinue } else { $null }
- Stop-Service -Name '${id}'
- $service.WaitForStatus('Stopped',[TimeSpan]::FromSeconds(30))
- if ($worker -and !$worker.WaitForExit(30000)) { throw 'Helper process is still stopping' }
- $instance=Get-CimInstance Win32_Service -Filter "Name='${id}'"
- $result=Invoke-CimMethod -InputObject $instance -MethodName Delete
- $service.Dispose()
- if ($result.ReturnValue -ne 0) { throw 'Cannot remove helper service' }
-}
-$base=Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'FluxyHelper'
-if (Test-Path -LiteralPath $base) {
- if ((Get-Item -LiteralPath $base).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Unsafe helper directory' }
- Remove-Item -LiteralPath $base -Recurse -Force
-}`
+    throw new Error('Script setup is only supported on Linux')
 }

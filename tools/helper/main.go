@@ -442,8 +442,18 @@ func command() error {
 	if len(os.Args) == 1 {
 		return platformMain()
 	}
+	if os.Args[1] == "setup-native" || os.Args[1] == "setup-elevated" {
+		return nativeSetupCommand()
+	}
 	if len(os.Args) != 2 {
 		return errors.New("unsupported helper command")
+	}
+	if os.Args[1] == "user-sid" {
+		value, err := platformNetworkCommand("user-sid", nil)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(value)
 	}
 	if os.Args[1] == "dns-lease" {
 		return platformDNSLease()
@@ -456,7 +466,7 @@ func command() error {
 		return errors.New("oversized helper input")
 	}
 	switch os.Args[1] {
-	case "network-snapshot", "dns-status", "proxy-processes", "route-interface":
+	case "certificate-status", "network-snapshot", "dns-status", "proxy-processes", "route-interface":
 		value, err := platformNetworkCommand(os.Args[1], data)
 		if err != nil {
 			return err

@@ -4,7 +4,7 @@ import {
     executableName,
     portableInstallationScript,
     portableUninstallationScript,
-    encodedPowerShell,
+    windowsInstallationRequest,
     supportedHelperPlatform
 } from '../../src/main/system/helper-platform'
 import { tunInterfaceName } from '../../src/main/tun/tun-platform'
@@ -39,15 +39,21 @@ describe('cross-platform helper integration', () => {
         expect(script).toContain('systemctl enable --now')
         expect(portableUninstallationScript('linux')).toContain('systemctl stop')
     })
-    it('restricts Windows ACLs, pins files, and uses SCM lifecycle', () => {
-        const script = portableInstallationScript("C:\\User's Data\\stage", hashes, hash, 'win32')
-        expect(script).toContain("User''s Data")
-        expect(script).toContain('$acl.SetAccessRuleProtection($true,$false)')
-        expect(script.indexOf('Get-FileHash')).toBeLessThan(script.indexOf('Stop-Service'))
-        expect(script).toContain('New-Service')
-        expect(script).toContain('fluxy-helper.exe')
-        expect(portableUninstallationScript('win32')).toContain("WaitForStatus('Stopped'")
-        expect(Buffer.from(encodedPowerShell(script), 'base64').toString('utf16le')).toBe(script)
+    it('passes Windows setup as structured data and rejects script setup', () => {
+        const stage = "C:\\User's Data\\stage & literal"
+        expect(JSON.parse(windowsInstallationRequest(stage, hashes, hash))).toEqual({
+            action: 'install',
+            stage,
+            ...hashes,
+            pairingSHA256: hash
+        })
+        expect(() => portableInstallationScript(stage, hashes, hash, 'win32')).toThrow(
+            'only supported on Linux'
+        )
+        expect(() => portableUninstallationScript('win32')).toThrow('only supported on Linux')
+        expect(() =>
+            windowsInstallationRequest(stage, { ...hashes, helperSHA256: 'bad' }, hash)
+        ).toThrow('checksum')
     })
     it('rejects injectable manifest values', () => {
         expect(() =>

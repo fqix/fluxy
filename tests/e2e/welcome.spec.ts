@@ -101,7 +101,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
             cp.spawn = ((file: string, ...args: unknown[]) =>
                 (args[0] as string[] | undefined)?.[0] === 'authorize-desktop' ||
                 file === '/usr/bin/pkexec' ||
-                (file === 'powershell.exe' && JSON.stringify(args).includes('-EncodedCommand'))
+                (args[0] as string[] | undefined)?.[0] === 'setup-native'
                     ? original(
                           process.execPath,
                           ['-e', 'process.stderr.write("Authorization canceled"); process.exit(1)'],
@@ -110,7 +110,8 @@ test('first-run setup reads real status, handles cancellation and persists expli
                     : Reflect.apply(original, cp, [file, ...args])) as typeof cp.spawn
         })
         await welcome.getByRole('button', { name: 'Set Up', exact: true }).click()
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
+        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete', { timeout: 20000 })
+        await expect(welcome.getByRole('alert')).toContainText('Authorization canceled')
         expect((await page.evaluate(() => window.fluxy.certificateStatus())).trusted).toBe(false)
         const certificate = await readFile(join(directory, 'certificates/certs/ca.pem'), 'utf8')
         await expect(welcome.getByRole('alert')).toBeVisible()

@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 export async function nativeWindowsQuery(
     command:
+        | 'certificate-status'
         | 'network-snapshot'
         | 'dns-status'
         | 'proxy-processes'

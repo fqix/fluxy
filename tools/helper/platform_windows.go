@@ -1,18 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/binary"
 	"errors"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
-	"unicode/utf16"
+	"syscall"
 	"unsafe"
 
 	"github.com/Microsoft/go-winio"
@@ -137,30 +135,42 @@ func containChild(cmd *exec.Cmd) (func(), error) {
 	return func() { windows.CloseHandle(job) }, nil
 }
 func trustCertificate(cert *x509.Certificate, install bool, base string) error {
-	// Compare complete DER before deletion; missing entries are an idempotent success.
-	root, err := windows.GetSystemDirectory()
+	name, _ := windows.UTF16PtrFromString("ROOT")
+	store, err := windows.CertOpenStore(windows.CERT_STORE_PROV_SYSTEM_W, 0, 0, windows.CERT_SYSTEM_STORE_LOCAL_MACHINE|windows.CERT_STORE_OPEN_EXISTING_FLAG, uintptr(unsafe.Pointer(name)))
 	if err != nil {
 		return err
 	}
-	operation := `$store.Remove($entry)`
+	defer windows.CertCloseStore(store, 0)
+	return updateCertificateStore(store, cert.Raw, install)
+}
+func updateCertificateStore(store windows.Handle, raw []byte, install bool) error {
+	if len(raw) == 0 {
+		return errors.New("empty certificate")
+	}
 	if install {
-		operation = `$store.Add($cert)`
+		cert, err := windows.CertCreateCertificateContext(windows.X509_ASN_ENCODING, &raw[0], uint32(len(raw)))
+		if err != nil {
+			return err
+		}
+		defer windows.CertFreeCertificateContext(cert)
+		return windows.CertAddCertificateContextToStore(store, cert, windows.CERT_STORE_ADD_REPLACE_EXISTING, nil)
 	}
-	script := `$ErrorActionPreference='Stop'; $raw=[Convert]::FromBase64String('` + base64.StdEncoding.EncodeToString(cert.Raw) + `'); $cert=[Security.Cryptography.X509Certificates.X509Certificate2]::new($raw); $store=New-Object Security.Cryptography.X509Certificates.X509Store('Root','LocalMachine'); $store.Open('ReadWrite'); try { `
-	if install {
-		script += operation
-	} else {
-		script += `foreach ($entry in @($store.Certificates)) { if ([Convert]::ToBase64String($entry.RawData) -eq [Convert]::ToBase64String($raw)) { ` + operation + ` } }`
+	var previous *windows.CertContext
+	for {
+		cert, err := windows.CertEnumCertificatesInStore(store, previous)
+		if err != nil {
+			if errors.Is(err, syscall.Errno(windows.CRYPT_E_NOT_FOUND)) {
+				return nil
+			}
+			return err
+		}
+		previous = cert
+		if bytes.Equal(unsafe.Slice(cert.EncodedCert, cert.Length), raw) {
+			duplicate := windows.CertDuplicateCertificateContext(cert)
+			if err = windows.CertDeleteCertificateFromStore(duplicate); err != nil {
+				windows.CertFreeCertificateContext(cert)
+				return err
+			}
+		}
 	}
-	script += ` } finally { $store.Close() }`
-	units := utf16.Encode([]rune(script))
-	encoded := make([]byte, len(units)*2)
-	for i, u := range units {
-		binary.LittleEndian.PutUint16(encoded[i*2:], u)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, filepath.Join(root, "WindowsPowerShell", "v1.0", "powershell.exe"), "-NoProfile", "-NonInteractive", "-EncodedCommand", base64.StdEncoding.EncodeToString(encoded))
-	cmd.Env = platformEnv()
-	return cmd.Run()
 }
