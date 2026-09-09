@@ -10,7 +10,9 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"math/big"
+	"net/http/httptrace"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -62,6 +64,43 @@ func TestUpstreamTLS(t *testing.T) {
 			if tc.ca == nil && config.RootCAs != nil {
 				t.Fatal("default system roots were replaced")
 			}
+		})
+	}
+}
+
+func TestRequestTimingEarlyResponse(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		early bool
+		wait  float64
+	}{
+		{name: "response after upload", wait: 5},
+		{name: "response before upload callback", early: true, wait: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				timing := newTiming(time.Now())
+				trace := timing.trace()
+				time.Sleep(time.Millisecond)
+				if !tc.early {
+					trace.WroteRequest(httptrace.WroteRequestInfo{})
+				}
+				time.Sleep(5 * time.Millisecond)
+				trace.GotFirstResponseByte()
+				check := func() {
+					t.Helper()
+					wait, ok := timing.snapshot()["wait"]
+					if !ok || wait != tc.wait {
+						t.Fatalf("response wait = %v (present %v), want %v", wait, ok, tc.wait)
+					}
+				}
+				check()
+				if tc.early {
+					time.Sleep(time.Millisecond)
+					trace.WroteRequest(httptrace.WroteRequestInfo{})
+					check()
+				}
+			})
 		})
 	}
 }

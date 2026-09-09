@@ -196,15 +196,22 @@ func (t *requestTiming) trace() *httptrace.ClientTrace {
 		}
 	}
 	return &httptrace.ClientTrace{
-		GetConn:              func(string) { t.mu.Lock(); set("blocked", t.start); t.mu.Unlock() },
-		DNSStart:             func(httptrace.DNSStartInfo) { t.mu.Lock(); t.dns = time.Now(); t.mu.Unlock() },
-		DNSDone:              func(httptrace.DNSDoneInfo) { t.mu.Lock(); set("dns", t.dns); t.mu.Unlock() },
-		ConnectStart:         func(string, string) { t.mu.Lock(); t.connect = time.Now(); t.mu.Unlock() },
-		ConnectDone:          func(string, string, error) { t.mu.Lock(); set("connect", t.connect); t.mu.Unlock() },
-		TLSHandshakeStart:    func() { t.mu.Lock(); t.tls = time.Now(); t.mu.Unlock() },
-		TLSHandshakeDone:     func(tls.ConnectionState, error) { t.mu.Lock(); set("ssl", t.tls); t.mu.Unlock() },
-		WroteRequest:         func(httptrace.WroteRequestInfo) { t.mu.Lock(); t.sent = time.Now(); t.mu.Unlock() },
-		GotFirstResponseByte: func() { t.mu.Lock(); set("wait", t.sent); t.mu.Unlock() },
+		GetConn:           func(string) { t.mu.Lock(); set("blocked", t.start); t.mu.Unlock() },
+		DNSStart:          func(httptrace.DNSStartInfo) { t.mu.Lock(); t.dns = time.Now(); t.mu.Unlock() },
+		DNSDone:           func(httptrace.DNSDoneInfo) { t.mu.Lock(); set("dns", t.dns); t.mu.Unlock() },
+		ConnectStart:      func(string, string) { t.mu.Lock(); t.connect = time.Now(); t.mu.Unlock() },
+		ConnectDone:       func(string, string, error) { t.mu.Lock(); set("connect", t.connect); t.mu.Unlock() },
+		TLSHandshakeStart: func() { t.mu.Lock(); t.tls = time.Now(); t.mu.Unlock() },
+		TLSHandshakeDone:  func(tls.ConnectionState, error) { t.mu.Lock(); set("ssl", t.tls); t.mu.Unlock() },
+		WroteRequest:      func(httptrace.WroteRequestInfo) { t.mu.Lock(); t.sent = time.Now(); t.mu.Unlock() },
+		GotFirstResponseByte: func() {
+			t.mu.Lock()
+			// A response can arrive before WroteRequest fires on the writer goroutine.
+			// In that case there is no post-upload wait, but the phase is still present.
+			t.values["wait"] = 0
+			set("wait", t.sent)
+			t.mu.Unlock()
+		},
 	}
 }
 
