@@ -63,8 +63,15 @@ test('advanced rules persist, diff switches targets, and breakpoint queue retain
                 )
                 req.on('error', reject)
             })
-        await request('/alpha')
-        await request('/beta')
+        expect(await request('/alpha')).toBe(200)
+        expect(await request('/beta')).toBe(200)
+        await expect
+            .poll(() =>
+                page.evaluate(async () =>
+                    (await window.fluxy.snapshot()).transactions.map((t) => t.state)
+                )
+            )
+            .toEqual(['completed', 'completed'])
         const rows = page.locator('tr[data-request-id]')
         await expect(rows).toHaveCount(2)
         await page.getByRole('button', { name: 'Add Filter', exact: true }).click()
@@ -84,6 +91,12 @@ test('advanced rules persist, diff switches targets, and breakpoint queue retain
         await expect(rows).toHaveCount(2)
         await menu(app, 'Diff')
         const diff = page.getByRole('dialog', { name: 'Diff', exact: true })
+        await diff
+            .getByLabel('First request', { exact: true })
+            .selectOption({ label: `GET http://127.0.0.1:${originPort}/alpha` })
+        await diff
+            .getByLabel('Second request', { exact: true })
+            .selectOption({ label: `GET http://127.0.0.1:${originPort}/beta` })
         await expect(diff.locator('.diff-section')).toHaveCount(3)
         await expect(diff.locator('.diff-line.added').filter({ hasText: 'beta' })).toHaveCount(1)
         await page.getByLabel('Diff target').selectOption('Request')
