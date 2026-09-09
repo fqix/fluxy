@@ -443,7 +443,7 @@ func command() error {
 		return platformMain()
 	}
 	if os.Args[1] == "setup-native" || os.Args[1] == "setup-elevated" {
-		return nativeSetupCommand()
+		return windowsSetupCommand()
 	}
 	if len(os.Args) != 2 {
 		return errors.New("unsupported helper command")

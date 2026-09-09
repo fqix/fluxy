@@ -149,7 +149,7 @@ func elevateSetup(r setupRequest) error {
 		}
 	}
 }
-func nativeSetupCommand() error {
+func windowsSetupCommand() error {
 	if len(os.Args) == 2 && os.Args[1] == "setup-native" {
 		data, err := io.ReadAll(io.LimitReader(os.Stdin, 65537))
 		if err != nil {

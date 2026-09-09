@@ -4,4 +4,4 @@ package main
 
 import "errors"
 
-func nativeSetupCommand() error { return errors.New("native setup requires Windows") }
+func windowsSetupCommand() error { return errors.New("native setup requires Windows") }
