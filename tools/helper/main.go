@@ -196,8 +196,11 @@ func (s *session) running() bool {
 		s.input.Close()
 		s.release()
 		if s.dnsCleanup != nil {
-			_ = s.dnsCleanup()
-			s.dnsCleanup = nil
+			if err := s.dnsCleanup(); err != nil {
+				s.exitError += "; " + err.Error()
+			} else {
+				s.dnsCleanup = nil
+			}
 			flushSplitDNSCache()
 		}
 		return false
@@ -207,7 +210,9 @@ func (s *session) running() bool {
 }
 func (s *session) stop() error {
 	if s.dnsCleanup != nil {
-		_ = s.dnsCleanup()
+		if err := s.dnsCleanup(); err != nil {
+			return err
+		}
 		s.dnsCleanup = nil
 		flushSplitDNSCache()
 	}
@@ -440,6 +445,9 @@ func command() error {
 	if len(os.Args) != 2 {
 		return errors.New("unsupported helper command")
 	}
+	if os.Args[1] == "dns-lease" {
+		return platformDNSLease()
+	}
 	data, err := io.ReadAll(io.LimitReader(os.Stdin, 65537))
 	if err != nil {
 		return err
@@ -448,6 +456,12 @@ func command() error {
 		return errors.New("oversized helper input")
 	}
 	switch os.Args[1] {
+	case "network-snapshot", "dns-status", "proxy-processes", "route-interface":
+		value, err := platformNetworkCommand(os.Args[1], data)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(value)
 	case "authorize-desktop":
 		var request struct {
 			Command     string `json:"command"`

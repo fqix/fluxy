@@ -1,3 +1,4 @@
+import { nativeWindowsQuery } from './native-windows'
 import { execFile } from 'node:child_process'
 import { getServers } from 'node:dns'
 import { readFile } from 'node:fs/promises'
@@ -17,7 +18,19 @@ export interface SplitDNS {
     domains: string[]
 }
 
-export function splitDNSResolverExists(interfaceName: string): Promise<boolean> {
+export function splitDNSResolverExists(
+    interfaceName: string,
+    platform = process.platform
+): Promise<boolean> {
+    if (platform === 'win32') {
+        if (!/^fluxy[0-9]{4,5}$/.test(interfaceName))
+            return Promise.reject(new Error('Invalid Fluxy TUN interface'))
+        return nativeWindowsQuery('dns-status', { interfaceName }).then((result) => {
+            if (typeof result !== 'boolean')
+                throw new Error('Cannot verify that Fluxy split DNS was restored')
+            return result
+        })
+    }
     if (!/^utun[0-9]{4,5}$/.test(interfaceName))
         return Promise.reject(new Error('Invalid Fluxy TUN interface'))
     return new Promise((resolve, reject) => {
@@ -76,18 +89,37 @@ export async function prepareSplitDNS(
     options: { interactive?: boolean } = {}
 ): Promise<SplitDNS | null> {
     const domains = requiredCaptureDomainsSchema.parse(captureDomains)
-    if (process.platform !== 'darwin') {
-        throw new Error('Domain-based TUN capture currently requires macOS')
+    if (!['darwin', 'win32'].includes(process.platform)) {
+        throw new Error('Domain-based TUN capture currently requires macOS or Windows')
     }
     const processes = await discoverProxyProcesses()
     if (signal.aborted) return null
-    const { stdout } = await promisify(execFile)('/usr/sbin/netstat', ['-rn', '-f', 'inet'], {
-        timeout: 5000
-    })
-    const ipv4Range = selectFakeIPRange(stdout)
+    let routes: string
+    let servers: string[]
+    if (process.platform === 'win32') {
+        const snapshot = (await nativeWindowsQuery('network-snapshot')) as {
+            routes: unknown
+            servers: unknown
+        }
+        if (
+            !Array.isArray(snapshot.routes) ||
+            !Array.isArray(snapshot.servers) ||
+            ![...snapshot.routes, ...snapshot.servers].every((value) => typeof value === 'string')
+        )
+            throw new Error('Cannot read Windows routes and DNS servers')
+        routes = snapshot.routes.join('\n')
+        servers = snapshot.servers
+    } else {
+        routes = (
+            await promisify(execFile)('/usr/sbin/netstat', ['-rn', '-f', 'inet'], {
+                timeout: 5000
+            })
+        ).stdout
+        const resolvConf = await readFile('/etc/resolv.conf', 'utf8').catch(() => '')
+        servers = [...resolvConf.matchAll(/^\s*nameserver\s+(\S+)/gm)].map((match) => match[1])
+    }
+    const ipv4Range = selectFakeIPRange(routes)
     // Snapshot before installing the supplemental resolver. Never resolve through our own DNS.
-    const resolvConf = await readFile('/etc/resolv.conf', 'utf8').catch(() => '')
-    const servers = [...resolvConf.matchAll(/^\s*nameserver\s+(\S+)/gm)].map((match) => match[1])
     const server = (servers.length ? servers : getServers()).find(
         (value) => isIP(value) && value !== splitDNSAddress && value !== '0.0.0.0'
     )

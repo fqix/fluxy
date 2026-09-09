@@ -131,7 +131,7 @@ export function Welcome({
             capture: true,
             title: isTun ? 'TUN Capture' : 'Socks Proxy',
             detail: isTun
-                ? 'Capture selected domains across apps. Complete setup above to enable TUN on macOS.'
+                ? 'Capture selected domains across apps. Complete setup above to enable TUN on macOS or Windows.'
                 : 'Connect your app to Fluxy’s local SOCKS5 endpoint to capture HTTP and HTTPS traffic. HTTPS inspection requires trusting the root certificate. Supports TCP; UDP relay is not available.',
             icon: Network,
             done:

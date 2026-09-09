@@ -1,3 +1,4 @@
+import { nativeWindowsQuery } from './native-windows'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -26,17 +27,9 @@ export function parseProxyProcesses(output: string): ProxyProcess[] {
 export async function discoverProxyProcesses(): Promise<ProxyProcess[]> {
     const execute = promisify(execFile)
     if (process.platform === 'win32') {
-        const { stdout } = await execute(
-            'powershell.exe',
-            [
-                '-NoProfile',
-                '-NonInteractive',
-                '-Command',
-                "Get-Process | ForEach-Object { '{0} {1}' -f $_.Id,$_.ProcessName }"
-            ],
-            { timeout: 5000, windowsHide: true }
-        )
-        return parseProxyProcesses(stdout)
+        const output = await nativeWindowsQuery('proxy-processes')
+        if (typeof output !== 'string') throw new Error('Invalid Windows process snapshot')
+        return parseProxyProcesses(output)
     }
     const { stdout } = await execute('ps', ['-axo', 'pid=,comm='], { timeout: 5000 })
     return parseProxyProcesses(stdout)

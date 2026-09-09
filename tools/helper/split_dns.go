@@ -34,8 +34,8 @@ func validateCaptureDomains(domains []string) error {
 }
 
 func (p splitDNSParams) validate() error {
-	if runtime.GOOS != "darwin" {
-		return errors.New("split DNS capture is only supported on macOS")
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
+		return errors.New("split DNS capture is only supported on macOS and Windows")
 	}
 	if err := validateCaptureDomains(p.Domains); err != nil {
 		return err

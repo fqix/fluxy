@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async () => {
-    test.skip(process.platform !== 'darwin', 'Supplemental DNS coexistence is macOS-only')
+    test.skip(
+        !['darwin', 'win32'].includes(process.platform),
+        'Scoped TUN requires macOS or Windows'
+    )
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-coexistence-'))
     await writeFile(
         join(directory, 'preferences.json'),
@@ -52,11 +55,18 @@ test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async ()
                 callback: Function
             ) => {
                 const stdout =
-                    file === 'ps'
-                        ? '123 /Applications/Clash Verge.app/Contents/MacOS/verge-mihomo\n'
-                        : file === '/usr/sbin/netstat'
-                          ? '198.18/16 utun1024\n0/1 utun1024\n128.0/1 utun1024\n'
-                          : undefined
+                    file.endsWith('fluxy-helper.exe') && args[0] === 'proxy-processes'
+                        ? JSON.stringify('123 verge-mihomo.exe\n')
+                        : file.endsWith('fluxy-helper.exe') && args[0] === 'network-snapshot'
+                          ? JSON.stringify({
+                                routes: ['198.18.0.0/16', '0.0.0.0/1', '128.0.0.0/1'],
+                                servers: ['192.0.2.53']
+                            })
+                          : file === 'ps'
+                            ? '123 /Applications/Clash Verge.app/Contents/MacOS/verge-mihomo\n'
+                            : file === '/usr/sbin/netstat'
+                              ? '198.18/16 utun1024\n0/1 utun1024\n128.0/1 utun1024\n'
+                              : undefined
                 if (stdout !== undefined) {
                     queueMicrotask(() => callback(null, stdout, ''))
                     return {}
@@ -83,7 +93,7 @@ test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async ()
             fs.readFile = ((path: unknown, ...args: unknown[]) => {
                 if (String(path) === '/etc/resolv.conf')
                     return Promise.resolve('nameserver 192.0.2.53\n')
-                if (String(path).endsWith('fluxy-core.build.json'))
+                if (/fluxy-core(?:\.exe)?\.build\.json$/.test(String(path)))
                     return Promise.reject(
                         new Error('TUN startup intentionally stopped before elevation')
                     )

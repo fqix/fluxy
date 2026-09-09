@@ -47,7 +47,13 @@ func (service) Execute(_ []string, r <-chan svc.ChangeRequest, s chan<- svc.Stat
 	defer cancel()
 	s <- svc.Status{State: svc.StartPending}
 	done := make(chan error, 1)
-	go func() { done <- run(ctx) }()
+	go func() {
+		if err := recoverWindowsSplitDNS(); err != nil {
+			done <- err
+			return
+		}
+		done <- run(ctx)
+	}()
 	s <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
 	for {
 		select {

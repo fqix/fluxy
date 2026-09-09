@@ -1,7 +1,12 @@
 import { describe, expect, it, vi, afterEach } from 'vitest'
 const commands = vi.hoisted(() => ({ exec: vi.fn(), end: vi.fn() }))
 vi.mock('node:child_process', () => ({ execFile: (...args: unknown[]) => commands.exec(...args) }))
-import { splitDNSResolverExists, waitForSplitDNSRemoval } from '../../src/main/tun/split-dns'
+import {
+    splitDNSResolverExists as platformResolverExists,
+    waitForSplitDNSRemoval
+} from '../../src/main/tun/split-dns'
+
+const splitDNSResolverExists = (name: string) => platformResolverExists(name, 'darwin')
 
 afterEach(() => vi.clearAllMocks())
 describe('split DNS restoration', () => {

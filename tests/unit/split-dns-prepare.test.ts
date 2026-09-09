@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const discovery = vi.hoisted(() => vi.fn())
 vi.mock('../../src/main/tun/proxy-discovery', () => ({ discoverProxyProcesses: discovery }))
 vi.mock('node:child_process', () => ({
@@ -8,8 +8,12 @@ vi.mock('node:child_process', () => ({
 vi.mock('node:fs/promises', () => ({ readFile: async () => 'nameserver 192.0.2.53\n' }))
 import { prepareSplitDNS } from '../../src/main/tun/split-dns'
 
-describe.skipIf(process.platform !== 'darwin')('domain capture preparation', () => {
-    beforeEach(() => discovery.mockReset().mockResolvedValue([]))
+describe('domain capture preparation', () => {
+    beforeEach(() => {
+        discovery.mockReset().mockResolvedValue([])
+        vi.stubGlobal('process', { ...process, platform: 'darwin' })
+    })
+    afterEach(() => vi.unstubAllGlobals())
     it('enables selected domains even without an external proxy and needs no coexistence dialog', async () => {
         const prompt = vi.fn()
         expect(

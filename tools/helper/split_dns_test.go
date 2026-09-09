@@ -8,7 +8,10 @@ import (
 func TestSplitDNSValidation(t *testing.T) {
 	p := tunParams{BridgePort: 6060, EgressPort: 6061, Password: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		InterfaceName: "utun2345", SplitDNS: &splitDNSParams{IPv4Range: "198.19.0.0/16", Server: "192.168.1.1", Domains: []string{"example.com"}}}
-	if runtime.GOOS != "darwin" {
+	if runtime.GOOS == "windows" {
+		p.InterfaceName = "fluxy2345"
+	}
+	if runtime.GOOS != "darwin" && runtime.GOOS != "windows" {
 		if p.SplitDNS.validate() == nil {
 			t.Fatal("accepted unsupported platform")
 		}

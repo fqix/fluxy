@@ -577,14 +577,14 @@ export class HelperService {
         return this.trusting
     }
     async startTun(params: unknown) {
-        await this.operation('tun.start', params, 30000)
+        await this.operation('tun.start', params, process.platform === 'win32' ? 60000 : 30000)
     }
     async stopTun() {
         if (!this.rpc) return
         this.operations++
         this.tunActive = false
         try {
-            await this.rpc.request('tun.stop', null, 20000)
+            await this.rpc.request('tun.stop', null, process.platform === 'win32' ? 45000 : 20000)
         } catch (error) {
             this.rpc.close()
             throw error
