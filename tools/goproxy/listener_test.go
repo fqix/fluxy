@@ -11,6 +11,83 @@ import (
 	"time"
 )
 
+// Hold a deadline reset before the underlying connection sees it, as can happen
+// when the setter is descheduled while the read pump handles the old timeout.
+type delayedDeadlineConn struct {
+	net.Conn
+	resetStarted chan struct{}
+	resetAllowed chan struct{}
+	reads        chan struct{}
+}
+
+func (c *delayedDeadlineConn) Read(data []byte) (int, error) {
+	c.reads <- struct{}{}
+	return c.Conn.Read(data)
+}
+
+func (c *delayedDeadlineConn) SetReadDeadline(deadline time.Time) error {
+	if deadline.IsZero() {
+		close(c.resetStarted)
+		<-c.resetAllowed
+	}
+	return c.Conn.SetReadDeadline(deadline)
+}
+
+func TestTrackedConnDeadlineResetIsAtomic(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	client, server := net.Pipe()
+	defer closeQuietly(client)
+	delayed := &delayedDeadlineConn{
+		Conn: server, resetStarted: make(chan struct{}), resetAllowed: make(chan struct{}),
+		reads: make(chan struct{}, 4),
+	}
+	conn := &trackedConn{
+		Conn: delayed, ctx: ctx, cancel: cancel, connections: &sync.Map{},
+		incoming: make(chan connectionRead, 1), readWake: make(chan struct{}, 1),
+	}
+	defer closeQuietly(conn)
+	if err := conn.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+		t.Fatal(err)
+	}
+	var workers sync.WaitGroup
+	workers.Go(conn.pump)
+	<-delayed.reads
+	// It must not retry Read until the real deadline is cleared.
+	firstTimeout := <-conn.incoming
+	conn.incoming <- firstTimeout
+	workers.Go(func() {
+		if err := conn.SetReadDeadline(time.Time{}); err != nil {
+			t.Error(err)
+		}
+	})
+	<-delayed.resetStarted
+	// Wake the pump to inspect the new deadline before the reset finishes.
+	conn.readWake <- struct{}{}
+	select {
+	case <-delayed.reads:
+		t.Error("read restarted before deadline reset completed")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(delayed.resetAllowed)
+	var buffer [4]byte
+	_, err := conn.Read(buffer[:])
+	var timeout net.Error
+	if !errors.As(err, &timeout) || !timeout.Timeout() {
+		t.Fatalf("wanted original timeout, got %v", err)
+	}
+	workers.Go(func() {
+		if _, err := client.Write([]byte("next")); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := io.ReadFull(conn, buffer[:]); err != nil {
+		t.Errorf("read after reset: %v", err)
+	}
+	closeQuietly(conn)
+	workers.Wait()
+}
+
 func TestTrackedConnReadDeadline(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())

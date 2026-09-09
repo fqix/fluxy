@@ -161,11 +161,13 @@ func (c *trackedConn) Read(data []byte) (int, error) {
 }
 func (c *trackedConn) SetReadDeadline(deadline time.Time) error {
 	c.deadlineMu.Lock()
-	c.deadline = deadline
-	c.deadlineMu.Unlock()
+	defer c.deadlineMu.Unlock()
+	// Publish a reset only after the socket has accepted it. Otherwise the
+	// pump can retry against the expired deadline and queue a stale timeout.
 	if err := c.Conn.SetReadDeadline(deadline); err != nil {
 		return err
 	}
+	c.deadline = deadline
 	select {
 	case c.readWake <- struct{}{}:
 	default:
