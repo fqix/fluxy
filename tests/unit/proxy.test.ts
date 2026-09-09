@@ -51,6 +51,7 @@ function request(path = '/hello', body = '', method = 'GET') {
                 },
                 (res) => {
                     const chunks: Buffer[] = []
+                    res.on('error', reject)
                     res.on('data', (b) => chunks.push(b))
                     res.on('end', () =>
                         resolve({
