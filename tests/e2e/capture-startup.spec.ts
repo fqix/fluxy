@@ -14,7 +14,7 @@ const launch = (directory: string) =>
         env: { ...process.env, FLUXY_DATA_DIR: directory }
     })
 
-test('successful setup remembers SOCKS mode and restores it until auto-start is disabled', async () => {
+test('successful setup remembers SOCKS mode and restores it until auto-start is disabled', async ({}, testInfo) => {
     test.setTimeout(90000)
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-capture-startup-'))
     const occupied = net.createServer().listen(0, '127.0.0.1')
@@ -81,6 +81,19 @@ test('successful setup remembers SOCKS mode and restores it until auto-start is 
         expect(disabled.settings.autoStart).toBe(false)
         expect(disabled.running).toBe(false)
         expect(disabled.systemProxy).toBe(false)
+    } catch (error) {
+        const page = await app.firstWindow()
+        const state = await page.evaluate(() => window.fluxy.snapshot())
+        const diagnostics = {
+            running: state.running,
+            logs: state.logs,
+            alerts: await page.getByRole('alert').allTextContents()
+        }
+        await testInfo.attach('startup-state', {
+            body: JSON.stringify(diagnostics, null, 2),
+            contentType: 'application/json'
+        })
+        throw error
     } finally {
         await app.close()
         occupied.close()

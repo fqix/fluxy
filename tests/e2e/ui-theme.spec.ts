@@ -30,6 +30,11 @@ test('shared controls retain keyboard focus and follow light, dark and system th
                 'background-color',
                 theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(36, 36, 38)'
             )
+            // Wait for control color transitions too; a dark background alone
+            // can produce a screenshot with the previous theme's text colors.
+            await expect(
+                page.locator('.sidebar-tabs').getByRole('button', { name: 'Focus', exact: true })
+            ).toHaveCSS('color', theme === 'light' ? 'rgb(32, 32, 36)' : 'rgb(230, 230, 233)')
             await search.fill('theme test')
             await expect(search).toHaveValue('theme test')
             await search.fill('')
