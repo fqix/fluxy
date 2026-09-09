@@ -142,11 +142,22 @@ func (c *trackedConn) Read(data []byte) (int, error) {
 		closeQuietly(c)
 		return 0, io.EOF
 	}
-	if len(c.buffer) == 0 && c.readErr == nil {
+	for len(c.buffer) == 0 && c.readErr == nil {
 		select {
 		case <-c.ctx.Done():
 			return 0, net.ErrClosed
 		case result := <-c.incoming:
+			var timeout net.Error
+			if errors.As(result.err, &timeout) && timeout.Timeout() {
+				c.deadlineMu.Lock()
+				expired := !c.deadline.IsZero() && !c.deadline.After(time.Now())
+				c.deadlineMu.Unlock()
+				if !expired {
+					// A background HTTP read may finish using buffered data before
+					// the pump delivers its timeout. A reset invalidates that error.
+					result.err = nil
+				}
+			}
 			c.buffer, c.readErr = result.data, result.err
 		}
 	}

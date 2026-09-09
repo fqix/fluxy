@@ -55,7 +55,10 @@ func TestTrackedConnDeadlineResetIsAtomic(t *testing.T) {
 	<-delayed.reads
 	// It must not retry Read until the real deadline is cleared.
 	firstTimeout := <-conn.incoming
-	conn.incoming <- firstTimeout
+	var timeout net.Error
+	if !errors.As(firstTimeout.err, &timeout) || !timeout.Timeout() {
+		t.Fatalf("wanted original timeout, got %v", firstTimeout.err)
+	}
 	workers.Go(func() {
 		if err := conn.SetReadDeadline(time.Time{}); err != nil {
 			t.Error(err)
@@ -71,11 +74,6 @@ func TestTrackedConnDeadlineResetIsAtomic(t *testing.T) {
 	}
 	close(delayed.resetAllowed)
 	var buffer [4]byte
-	_, err := conn.Read(buffer[:])
-	var timeout net.Error
-	if !errors.As(err, &timeout) || !timeout.Timeout() {
-		t.Fatalf("wanted original timeout, got %v", err)
-	}
 	workers.Go(func() {
 		if _, err := client.Write([]byte("next")); err != nil {
 			t.Error(err)
@@ -133,6 +131,44 @@ func TestTrackedConnReadDeadline(t *testing.T) {
 		if ctx.Err() == nil {
 			t.Fatal("missed a client disconnect during an idle stream")
 		}
+		workers.Wait()
+	})
+}
+
+func TestTrackedConnDiscardsTimeoutAfterDeadlineReset(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		client, server := net.Pipe()
+		defer closeQuietly(client)
+		conn := &trackedConn{
+			Conn: server, ctx: ctx, cancel: cancel, connections: &sync.Map{},
+			incoming: make(chan connectionRead, 1), readWake: make(chan struct{}, 1),
+		}
+		defer closeQuietly(conn)
+		if err := conn.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+			t.Fatal(err)
+		}
+		var workers sync.WaitGroup
+		workers.Go(conn.pump)
+		synctest.Wait()
+		// HTTP can finish its background read using buffered data and clear the
+		// deadline while the read-ahead pump still has the old timeout queued.
+		if err := conn.SetReadDeadline(time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+		workers.Go(func() {
+			if _, err := client.Write([]byte("next")); err != nil {
+				t.Error(err)
+			}
+		})
+		var buffer [4]byte
+		if _, err := io.ReadFull(conn, buffer[:]); err != nil {
+			t.Errorf("read after reset: %v", err)
+		} else if string(buffer[:]) != "next" {
+			t.Error("lost data after deadline reset")
+		}
+		closeQuietly(conn)
 		workers.Wait()
 	})
 }
