@@ -88,6 +88,7 @@ const call = (hook: Hook | undefined, context: IContext) =>
 
 /** goproxy owns sockets and TLS in a Go process; Fluxy owns policy and sessions. */
 export class Proxy {
+    port = 0
     httpServer?: EventEmitter
     httpAgent!: http.Agent
     httpsAgent!: http.Agent
@@ -392,6 +393,8 @@ export class Proxy {
             httpsAgent: http.Agent
             keepAlive: boolean
             timeout: number
+            ingressToken?: string
+            ingressPort?: number
         },
         done: Done
     ) {
@@ -449,13 +452,17 @@ export class Proxy {
             this.channel?.close()
         })
         this.wire.on('message', (message: any) => {
-            if (message.type === 'ready') finish()
-            else void this.message(message).catch((error) => this.fail(message.id, error))
+            if (message.type === 'ready') {
+                this.port = message.port
+                finish()
+            } else void this.message(message).catch((error) => this.fail(message.id, error))
         })
         this.send({
             type: 'start',
             port: options.port,
             host: options.host,
+            ingressToken: options.ingressToken,
+            ingressPort: options.ingressPort,
             root
         })
     }

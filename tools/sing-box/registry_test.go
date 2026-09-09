@@ -15,11 +15,13 @@ func TestCoreContextSupportsCaptureProfile(t *testing.T) {
         "inbounds":[
             {"type":"tun","tag":"capture","address":["172.31.255.1/30"],"stack":"gvisor","auto_route":true,"dns_mode":"disabled"},
             {"type":"http","tag":"egress","listen":"127.0.0.1","listen_port":19092},
-            {"type":"socks","tag":"test","listen":"127.0.0.1","listen_port":19093}
+            {"type":"socks","tag":"test","listen":"127.0.0.1","listen_port":19093},
+            {"type":"fluxy-mixed","tag":"proxy","listen":"127.0.0.1","listen_port":19094}
         ],
         "outbounds":[{"type":"direct","tag":"direct"},
             {"type":"http","tag":"inspect","server":"127.0.0.1","server_port":19091},
-            {"type":"socks","tag":"upstream","server":"127.0.0.1","server_port":7897}],
+            {"type":"socks","tag":"upstream","server":"127.0.0.1","server_port":7897},
+            {"type":"fluxy-inspect","tag":"private-inspect","server_port":19095,"token":"01234567890123456789012345678901"}],
         "route":{"default_domain_resolver":"local","find_process":true,"final":"direct", "rules":[
             {"inbound":["egress"],"action":"route","outbound":"direct"},
             {"action":"sniff","sniffer":["http","tls"],"timeout":"300ms"},

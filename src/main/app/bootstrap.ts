@@ -965,11 +965,11 @@ else {
                 },
                 (value) => safeStorage.decryptString(Buffer.from(value, 'base64'))
             )
-            engine = new ProxyEngine(store, emit)
-            engine.customCertificates = customCertificates
             const corePath = app.isPackaged
                 ? join(process.resourcesPath, 'core', executableName('fluxy-core'))
                 : join(app.getAppPath(), 'build', 'electron-core', executableName('fluxy-core'))
+            engine = new ProxyEngine(store, emit, undefined, corePath)
+            engine.customCertificates = customCertificates
             helper = new HelperService(
                 store.directory,
                 app.isPackaged
@@ -999,6 +999,7 @@ else {
             if (quitting) return
             engine.scriptRunner = (script, message) => scripts.run(script, message)
             systemProxy = new SystemProxy(store)
+            engine.onFailure = () => capture.stop()
             capture = new CaptureController(
                 () => store.settings,
                 engine,

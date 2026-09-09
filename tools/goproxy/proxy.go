@@ -73,6 +73,9 @@ func (r *runtime) proxy(root identity) (*goproxy.ProxyHttpServer, error) {
 		},
 	}
 	proxy.OnRequest().HandleConnectFunc(func(host string, pc *goproxy.ProxyCtx) (*goproxy.ConnectAction, string) {
+		if !r.hasIngress(pc.Req) {
+			return goproxy.RejectConnect, host
+		}
 		ctx, session := r.session(r.connectionContext(pc.Req))
 		out := r.peer.reader(ctx, session.id+":tunnel:out", make(http.Header))
 		replies, remove := r.peer.reply("inspect:" + session.id)
@@ -118,6 +121,9 @@ func (r *runtime) proxy(root identity) (*goproxy.ProxyHttpServer, error) {
 }
 
 func (r *runtime) onRequest(req *http.Request, pc *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	if !r.hasIngress(req) {
+		return req, goproxy.NewResponse(req, "text/plain", http.StatusProxyAuthRequired, "Private inspection endpoint")
+	}
 	originalRequest := req
 	ctx, session := r.session(req.Context())
 	stopConnection := context.AfterFunc(r.connectionContext(req), session.disconnected)
@@ -339,6 +345,11 @@ func contentLength(headers http.Header) int64 {
 }
 
 func (r *runtime) socketMetadata(req *http.Request) map[string]any {
+	if value, ok := r.connections.Load(req.RemoteAddr); ok {
+		if source := value.(*trackedConn).ingressSource.Load(); source != nil {
+			return map[string]any{"remoteAddress": source.IP.String(), "remotePort": source.Port, "localPort": r.ingressPort, "localAddress": "127.0.0.1"}
+		}
+	}
 	host, port, _ := net.SplitHostPort(req.RemoteAddr)
 	number, _ := strconv.Atoi(port)
 	return map[string]any{"remoteAddress": host, "remotePort": number, "localPort": r.port, "localAddress": "127.0.0.1"}

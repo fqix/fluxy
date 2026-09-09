@@ -18,12 +18,14 @@ import (
 )
 
 type runtime struct {
-	peer        *peer
-	sessions    sync.Map
-	connections sync.Map
-	sequence    atomic.Uint64
-	transports  transportPool
-	port        int
+	peer         *peer
+	sessions     sync.Map
+	connections  sync.Map
+	sequence     atomic.Uint64
+	transports   transportPool
+	port         int
+	ingressToken string
+	ingressPort  int
 }
 
 func main() {
@@ -57,6 +59,8 @@ func (r *runtime) run(ctx context.Context, input io.Reader) error {
 	if start.Type != "start" || start.Root == nil {
 		return errors.New("expected start message with root identity")
 	}
+	r.ingressToken = start.IngressToken
+	r.ingressPort = start.IngressPort
 	proxy, err := r.proxy(*start.Root)
 	if err != nil {
 		return err
@@ -66,7 +70,11 @@ func (r *runtime) run(ctx context.Context, input io.Reader) error {
 		return fmt.Errorf("listen for captured traffic: %w", err)
 	}
 	r.port = listener.Addr().(*net.TCPAddr).Port
-	mixed := newMixedListener(ctx, listener, &r.connections)
+	var prepare func(net.Conn) (net.Conn, error)
+	if r.ingressToken != "" {
+		prepare = r.prepareIngress
+	}
+	capture := newCaptureListener(ctx, listener, &r.connections, prepare)
 	server := &http.Server{
 		Handler:           flushHandler{proxy},
 		ReadHeaderTimeout: 15 * time.Second,
@@ -75,7 +83,7 @@ func (r *runtime) run(ctx context.Context, input io.Reader) error {
 	}
 	defer closeQuietly(server)
 	go func() {
-		if err := server.Serve(mixed); err != nil && !errors.Is(err, http.ErrServerClosed) && ctx.Err() == nil {
+		if err := server.Serve(capture); err != nil && !errors.Is(err, http.ErrServerClosed) && ctx.Err() == nil {
 			slog.Error("proxy listener stopped", "error", err)
 			r.peer.fatal()
 		}

@@ -60,6 +60,8 @@ type message struct {
 	Error         string         `json:"error,omitempty"`
 	Host          string         `json:"host,omitempty"`
 	Port          int            `json:"port,omitempty"`
+	IngressToken  string         `json:"ingressToken,omitempty"`
+	IngressPort   int            `json:"ingressPort,omitempty"`
 	Root          *identity      `json:"root,omitempty"`
 	Identity      *identity      `json:"identity,omitempty"`
 	URL           string         `json:"url,omitempty"`

@@ -22,8 +22,8 @@
     "core:build": "node build-electron-core.mjs && node build-electron-helper.mjs && npm run proxy:build",
     "predev": "npm run core:build",
     "pretest": "npm run core:build",
-    "test:protocol": "npm run proxy:build && tsx tests/protocol/verify.ts",
-    "test:protocol:public": "npm run proxy:build && tsx tests/protocol/public.ts",
+    "test:protocol": "node build-electron-core.mjs && npm run proxy:build && tsx tests/protocol/verify.ts",
+    "test:protocol:public": "node build-electron-core.mjs && npm run proxy:build && tsx tests/protocol/public.ts",
     "proxy:build": "node tools/goproxy/build.mjs"
   },
   "dependencies": {

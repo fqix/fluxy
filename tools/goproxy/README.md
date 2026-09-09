@@ -30,7 +30,8 @@ signed binary checksum before sealing the application bundle.
 
 ## Policy and streams
 
-The process accepts HTTP proxy and SOCKS5 CONNECT on one listening port.
+In system proxy mode, sing-box owns the public HTTP/SOCKS port. This process listens on an ephemeral loopback port and accepts only authenticated inspection envelopes from sing-box. The envelope carries the original source endpoint for process attribution and is removed before capture hooks run. HTTP streams retain their original upgrade and cancellation behavior. In TUN mode, the bridge connects to an HTTP/CONNECT inspection listener. SOCKS server handshakes are handled exclusively by sing-box; this process retains SOCKS client support for configured upstream proxies.
+
 CONNECT inspection follows Fluxy's SSL Proxying rules; bypassed tunnels retain
 the existing main-process routing and attribution path. Interception uses
 Fluxy's current root CA or matching custom server identity. Upstream TLS

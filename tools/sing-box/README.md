@@ -15,8 +15,8 @@ alone would still register many unused protocols through `include`.
 
 | Area | Included |
 | --- | --- |
-| Inbounds | TUN, HTTP, SOCKS, Direct (local DNS testing) |
-| Outbounds | Direct, HTTP CONNECT, SOCKS |
+| Inbounds | TUN, HTTP, SOCKS, Fluxy mixed HTTP/SOCKS, Direct (local DNS testing) |
+| Outbounds | Direct, HTTP CONNECT, SOCKS, private Fluxy inspection bridge |
 | DNS transports | Local, UDP, TCP, TLS, HTTPS, Fake IP |
 | TUN stack | gVisor (`with_gvisor`) and upstream system stack support |
 | Routing | Shared upstream routing and HTTP/TLS sniffing used by the Electron bridge |
@@ -75,7 +75,9 @@ and license files. `package.json` places these in `Contents/Resources/core/`.
 On macOS, `tools/sign-electron.cjs` signs the executable, refreshes the binary checksum
 in the manifest and re-seals the application before notarization.
 
-The transport core is started by the cross-platform Go helper and managed
+In system proxy mode, `src/main/capture/sing-box-proxy.ts` starts the core directly without elevation. `fluxy-mixed` delegates SOCKS handshakes to sing-box and forwards HTTP as an unchanged stream, preserving WebSocket upgrades and cancellation. `fluxy-inspect` sends an authenticated CONNECT envelope to the internal inspection engine, retaining the original client endpoint. This mode rejects UDP. The public port remains compatible with existing HTTP/HTTPS system proxy settings and SOCKS5 clients.
+
+For TUN, the transport core is started by the cross-platform Go helper and managed
 by `src/main/tun/tun.ts`. The former Xcode embedding mode and Python TUN prototype
 have been removed. See [helper platform requirements](../../tools/helper/README.md).
 

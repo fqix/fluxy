@@ -13,6 +13,7 @@ import (
 	"github.com/sagernet/sing-box/dns/transport"
 	"github.com/sagernet/sing-box/dns/transport/fakeip"
 	"github.com/sagernet/sing-box/dns/transport/local"
+	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/protocol/direct"
 	"github.com/sagernet/sing-box/protocol/http"
 	"github.com/sagernet/sing-box/protocol/socks"
@@ -26,12 +27,14 @@ func coreContext(ctx context.Context) context.Context {
 	tun.RegisterInbound(inbounds)
 	http.RegisterInbound(inbounds)
 	socks.RegisterInbound(inbounds)
+	inbound.Register[option.SocksInboundOptions](inbounds, "fluxy-mixed", newProxyInbound)
 	direct.RegisterInbound(inbounds)
 
 	outbounds := outbound.NewRegistry()
 	direct.RegisterOutbound(outbounds)
 	http.RegisterOutbound(outbounds)
 	socks.RegisterOutbound(outbounds)
+	outbound.Register[inspectOptions](outbounds, "fluxy-inspect", newInspectOutbound)
 
 	transports := dns.NewTransportRegistry()
 	local.RegisterTransport(transports)
