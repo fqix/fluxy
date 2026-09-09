@@ -466,7 +466,7 @@ func command() error {
 		return errors.New("oversized helper input")
 	}
 	switch os.Args[1] {
-	case "certificate-status", "network-snapshot", "dns-status", "proxy-processes", "route-interface":
+	case "system-proxy", "certificate-status", "network-snapshot", "dns-status", "proxy-processes", "route-interface":
 		value, err := platformNetworkCommand(os.Args[1], data)
 		if err != nil {
 			return err

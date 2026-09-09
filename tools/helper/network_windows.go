@@ -14,6 +14,8 @@ import (
 
 func platformNetworkCommand(command string, data []byte) (any, error) {
 	switch command {
+	case "system-proxy":
+		return desktopProxyCommand(data)
 	case "certificate-status":
 		var request struct {
 			DER string `json:"der"`

@@ -3,8 +3,9 @@
 import { existsSync, readFileSync, unlinkSync, appendFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { desktopProxyBackupSchema, restoreDesktopProxy } from './desktop-proxy'
-const [directory, parentPID] = process.argv.slice(2)
+import { nativeWindowsQuery } from '../tun/native-windows'
+import { desktopProxyBackend, desktopProxyBackupSchema, restoreDesktopProxy } from './desktop-proxy'
+const [directory, parentPID, helperPath] = process.argv.slice(2)
 const parent = Number(parentPID)
 if (!directory || !Number.isInteger(parent) || parent < 1) process.exit(1)
 const backup = join(directory, 'system-proxy-backup.json')
@@ -19,7 +20,17 @@ const timer = setInterval(async () => {
     try {
         const saved = JSON.parse(readFileSync(backup, 'utf8'))
         if (saved.backend) {
-            await restoreDesktopProxy(desktopProxyBackupSchema.parse(saved))
+            const state = desktopProxyBackupSchema.parse(saved)
+            if (state.backend === 'windows' && !helperPath)
+                throw new Error('Native proxy helper path is missing')
+            const adapter = await desktopProxyBackend(
+                process.platform,
+                process.env,
+                undefined,
+                state.backend,
+                (state) => nativeWindowsQuery('system-proxy', state ?? null, helperPath)
+            )
+            await restoreDesktopProxy(state, adapter)
             unlinkSync(backup)
             process.exit(0)
         }

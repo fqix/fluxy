@@ -1,8 +1,11 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { join } from 'node:path'
 import { z } from 'zod'
-import { windowsProxyScript } from './windows-proxy'
+import { nativeWindowsQuery } from '../tun/native-windows'
+
+export type WindowsProxyCall = (state?: ProxyValues) => Promise<unknown>
+const windowsProxyCall: WindowsProxyCall = (state) =>
+    nativeWindowsQuery('system-proxy', state ?? null)
 
 export type ProxyValues = Record<string, string>
 export type ProxyCommand = (file: string, args: string[]) => Promise<string>
@@ -118,22 +121,7 @@ async function kde(run: ProxyCommand): Promise<DesktopProxyBackend> {
     }
 }
 
-function windows(run: ProxyCommand, env: NodeJS.ProcessEnv): DesktopProxyBackend {
-    const executable = join(
-        env.SystemRoot || 'C:\\Windows',
-        'System32',
-        'WindowsPowerShell',
-        'v1.0',
-        'powershell.exe'
-    )
-    const invoke = (state?: ProxyValues) =>
-        run(executable, [
-            '-NoLogo',
-            '-NoProfile',
-            '-NonInteractive',
-            '-EncodedCommand',
-            windowsProxyScript(state)
-        ])
+function windows(invoke: WindowsProxyCall): DesktopProxyBackend {
     return {
         id: 'windows',
         async read() {
@@ -144,7 +132,7 @@ function windows(run: ProxyCommand, env: NodeJS.ProcessEnv): DesktopProxyBackend
                     bypass: z.string(),
                     pac: z.string()
                 })
-                .parse(JSON.parse(await invoke()))
+                .parse(await invoke())
         },
         target(previous, port) {
             // Retain protocol-specific SOCKS/FTP mappings; Fluxy only handles HTTP/HTTPS.
@@ -170,10 +158,11 @@ export async function desktopProxyBackend(
     platform: NodeJS.Platform = process.platform,
     env: NodeJS.ProcessEnv = process.env,
     run: ProxyCommand = command,
-    savedBackend?: DesktopProxyBackend['id']
+    savedBackend?: DesktopProxyBackend['id'],
+    native: WindowsProxyCall = windowsProxyCall
 ): Promise<DesktopProxyBackend> {
     if (platform === 'win32' && (!savedBackend || savedBackend === 'windows'))
-        return windows(run, env)
+        return windows(native)
     if (platform === 'linux') {
         if (
             savedBackend === 'kde' ||

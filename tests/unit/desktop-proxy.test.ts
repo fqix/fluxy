@@ -4,6 +4,7 @@ import {
     restoreDesktopProxy,
     type DesktopProxyBackend,
     type ProxyCommand,
+    type WindowsProxyCall,
     type ProxyValues
 } from '../../src/main/system/desktop-proxy'
 
@@ -117,27 +118,19 @@ describe('desktop proxy backends (system commands are simulated)', () => {
         }
     )
 
-    it('Windows preserves PAC, auto-detect and bypass settings and uses encoded data', async () => {
+    it('Windows preserves PAC, auto-detect and bypass settings through native structured calls', async () => {
         let current: ProxyValues = {
             flags: '13',
             server: 'http=old:8080;socks=127.0.0.1:7890',
             bypass: '<local>;*.corp',
             pac: "https://proxy.example/pac?x=';$value"
         }
-        const run = vi.fn<ProxyCommand>(async (file, args) => {
-            expect(file).toMatch(/powershell\.exe$/)
-            expect(args).toContain('-NonInteractive')
-            expect(args).not.toContain('-ExecutionPolicy')
-            const script = Buffer.from(args.at(-1)!, 'base64').toString('utf16le')
-            const encoded = script.match(/FromBase64String\('([^']+)'\)/)![1]
-            const value = JSON.parse(Buffer.from(encoded, 'base64').toString())
-            if (value) {
-                current = value
-                return ''
-            }
-            return JSON.stringify(current)
+        const native = vi.fn<WindowsProxyCall>(async (value) => {
+            if (value) current = { ...value }
+            return { ...current }
         })
-        const backend = await desktopProxyBackend('win32', {}, run)
+        const run = vi.fn<ProxyCommand>()
+        const backend = await desktopProxyBackend('win32', {}, run, undefined, native)
         const previous = await backend.read(),
             applied = backend.target(previous, 6060)
         await backend.write(applied)
@@ -148,6 +141,7 @@ describe('desktop proxy backends (system commands are simulated)', () => {
         current.bypass = '*.new-corp'
         await restoreDesktopProxy({ version: 1, backend: 'windows', previous, applied }, backend)
         expect(current).toEqual({ ...previous, bypass: '*.new-corp' })
+        expect(run).not.toHaveBeenCalled()
     })
 
     it('reports unsupported Linux sessions without changing any settings', async () => {

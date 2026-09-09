@@ -9,6 +9,7 @@ import {
     restoreDesktopProxy,
     type DesktopProxyBackend
 } from './desktop-proxy'
+import { nativeWindowsHelperPath } from '../tun/native-windows'
 const exec = promisify(execFile)
 type ProxyState = {
     service: string
@@ -98,7 +99,7 @@ export class SystemProxy {
                         await this.command([`-set${item.kind}state`, item.service, 'on'])
                     }
                     this.enabled = true
-                    this.startWatchdog()
+                    await this.startWatchdog()
                 } catch (error) {
                     await this.restore()
                     throw error
@@ -108,10 +109,15 @@ export class SystemProxy {
             this.busy = false
         }
     }
-    private startWatchdog() {
+    private async startWatchdog() {
         this.watchdog = spawn(
             process.execPath,
-            [join(__dirname, 'watchdog.js'), this.store.directory, String(process.pid)],
+            [
+                join(__dirname, 'watchdog.js'),
+                this.store.directory,
+                String(process.pid),
+                this.platform === 'win32' ? await nativeWindowsHelperPath() : ''
+            ],
             {
                 env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
                 detached: true,
@@ -144,7 +150,7 @@ export class SystemProxy {
             const current = await this.desktop.read()
             if (Object.keys(applied).some((key) => current[key] !== applied[key]))
                 throw new Error('System proxy setup could not be verified')
-            this.startWatchdog()
+            await this.startWatchdog()
         } catch (error) {
             await this.restore()
             throw error
