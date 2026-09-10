@@ -1,6 +1,9 @@
 {
   "log": {
-    "output": "stderr"
+    "level": "info",
+    "output": "stderr",
+    "disabled": false,
+    "timestamp": false
   },
   "services": [
     {

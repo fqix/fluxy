@@ -18,7 +18,13 @@ import (
 
 // Params is the only TUN request shape the helper accepts. It never carries an
 // executable path, a shell command or a configuration file.
+type InspectorParams struct {
+	Port int    `json:"port"`
+	Host string `json:"host"`
+}
+
 type Params struct {
+	Inspector       *InspectorParams `json:"inspector,omitempty"`
 	BridgePort      int              `json:"bridgePort"`
 	EgressPort      int              `json:"egressPort"`
 	Password        string           `json:"password"`
@@ -31,6 +37,12 @@ type Params struct {
 
 func (p Params) Validate() error {
 	port := func(n int) bool { return n >= 1024 && n <= 65535 }
+	if p.Inspector != nil {
+		if !port(p.Inspector.Port) || (p.Inspector.Host != "127.0.0.1" && p.Inspector.Host != "0.0.0.0") {
+			return errors.New("invalid inspector listener")
+		}
+		p.BridgePort = p.Inspector.Port
+	}
 	if !port(p.BridgePort) || !port(p.EgressPort) || p.BridgePort == p.EgressPort || (p.SocksPort != 0 && (!port(p.SocksPort) || p.SocksPort == p.BridgePort || p.SocksPort == p.EgressPort)) {
 		return errors.New("invalid ports")
 	}
@@ -91,6 +103,14 @@ func Config(p Params) map[string]any {
 			map[string]any{"action": "sniff", "sniffer": []string{"http", "tls"}, "timeout": "300ms"},
 			map[string]any{"network": "tcp", "protocol": []string{"http", "tls"}, "action": "route", "outbound": "inspect"},
 		}},
+	}
+	if p.Inspector != nil {
+		c["log"] = map[string]any{"level": "info", "output": "stderr", "timestamp": true}
+		c["services"] = []any{map[string]any{"type": "fluxy-inspector", "tag": "inspector"}}
+		c["inbounds"] = append(c["inbounds"].([]any), map[string]any{"type": "fluxy-mixed", "tag": "proxy", "listen": p.Inspector.Host, "listen_port": p.Inspector.Port})
+		c["outbounds"] = []any{direct, map[string]any{"type": "fluxy-inspect", "tag": "inspect", "inspector": "inspector"}}
+		route := c["route"].(map[string]any)
+		route["rules"] = append([]any{map[string]any{"inbound": []string{"proxy"}, "action": "route", "outbound": "inspect"}}, route["rules"].([]any)...)
 	}
 	if p.SplitDNS != nil {
 		splitdns.ApplyConfig(c, *p.SplitDNS)

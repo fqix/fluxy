@@ -22,6 +22,7 @@ export const helperID = 'dev.fengqi.fluxy.electron.helper'
 export const helperSocket = helperEndpoint()
 interface Reply {
     buildID: string
+    controlPort?: number
     tunRunning: boolean
     tunError?: string
 }
@@ -641,7 +642,64 @@ export class HelperService {
         return this.trusting
     }
     async startTun(params: unknown) {
-        await this.operation('tun.start', params, process.platform === 'win32' ? 60000 : 30000)
+        return this.operation('tun.start', params, process.platform === 'win32' ? 60000 : 30000)
+    }
+    async openTunInspector(params: { password: string; [key: string]: unknown }) {
+        const reply = await this.startTun(params)
+        let socket: net.Socket | undefined
+        try {
+            if (
+                !Number.isInteger(reply.controlPort) ||
+                reply.controlPort! < 1024 ||
+                reply.controlPort! > 65535
+            )
+                throw new Error('Helper does not support the integrated inspector; update Helper')
+            const stream = (socket = net.createConnection(reply.controlPort!, '127.0.0.1'))
+            await new Promise<void>((resolve, reject) => {
+                let received = Buffer.alloc(0)
+                const failed = (error: Error) => {
+                    cleanup()
+                    reject(error)
+                }
+                const closed = () =>
+                    failed(new Error('Helper inspector channel closed during authentication'))
+                const timer = setTimeout(
+                    () => failed(new Error('Helper inspector authentication timed out')),
+                    10000
+                )
+                const cleanup = () => {
+                    clearTimeout(timer)
+                    stream.off('error', failed)
+                    stream.off('close', closed)
+                    stream.off('data', data)
+                }
+                const data = (chunk: Buffer) => {
+                    received = Buffer.concat([received, chunk])
+                    if (received.length < 3) return
+                    if (received.subarray(0, 3).toString() !== 'OK\n')
+                        return failed(new Error('Helper inspector authentication failed'))
+                    stream.pause()
+                    cleanup()
+                    if (received.length > 3) stream.unshift(received.subarray(3))
+                    resolve()
+                }
+                stream.on('error', failed).on('close', closed).on('data', data)
+                stream.once('connect', () => stream.write(params.password + '\n'))
+            })
+            return {
+                stream,
+                ready: async () => {
+                    await this.operation('tun.ready', null, 30000)
+                },
+                close: async () => {
+                    stream.destroy()
+                }
+            }
+        } catch (error) {
+            socket?.destroy()
+            await this.stopTun().catch(() => {})
+            throw error
+        }
     }
     async stopTun() {
         if (!this.rpc) return

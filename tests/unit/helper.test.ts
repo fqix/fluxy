@@ -22,6 +22,11 @@ import { ensureCertificate } from '../../src/main/certificates/certificates'
 import { connect } from '../../src/main/tun/tun-bridge'
 import { unusedPort } from '../../src/main/tun/tun'
 import net from 'node:net'
+import http from 'node:http'
+import https from 'node:https'
+import forge from 'node-forge'
+import { Store } from '../../src/main/storage/store'
+import { ProxyEngine } from '../../src/main/capture/proxy'
 const execute = promisify(cp.execFile)
 const production = join(process.cwd(), 'build/electron-helper/fluxy-helper')
 const core = join(process.cwd(), 'build/electron-core/sing-box')
@@ -86,6 +91,30 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         await expect(
             invoke(production, ['validate-tun'], JSON.stringify({ ...params(), ...patch }))
         ).rejects.toThrow()
+    })
+    it('validates an integrated TUN inspector profile without an external inspection bridge', async () => {
+        const p = { ...params(), bridgePort: 0, inspector: { host: '127.0.0.1', port: 6060 } }
+        const value = await invoke(production, ['validate-tun'], JSON.stringify(p))
+        const config = JSON.parse(value)
+        expect(config.services).toEqual([{ type: 'fluxy-inspector', tag: 'inspector' }])
+        expect(config.inbounds.map((v: any) => v.type)).toEqual(['tun', 'http', 'fluxy-mixed'])
+        expect(config.outbounds.find((v: any) => v.tag === 'inspect')).toEqual({
+            type: 'fluxy-inspect',
+            tag: 'inspect',
+            inspector: 'inspector'
+        })
+        const path = join(directory, 'integrated.json')
+        await writeFile(path, value)
+        await execute(core, ['check', '-c', path])
+        for (const inspector of [
+            { host: '192.0.2.1', port: 6060 },
+            { host: '127.0.0.1', port: p.egressPort },
+            { host: '127.0.0.1', port: 80 }
+        ]) {
+            await expect(
+                invoke(production, ['validate-tun'], JSON.stringify({ ...p, inspector }))
+            ).rejects.toThrow()
+        }
     })
     it('accepts the actual public Fluxy CA but rejects malformed certificates', async () => {
         const path = await ensureCertificate(join(directory, 'certificates'))
@@ -357,6 +386,157 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         try {
             await expect(bad.request('status')).rejects.toThrow('closed')
             await expect(rpc.request('execute', { command: 'id' })).rejects.toThrow(
+    it('captures HTTP and HTTPS in the helper-owned core without a second sing-box process', async () => {
+        const { root, token, port, worker, closed } = await server()
+        const manifest = {
+            version: 1,
+            buildID: 'b'.repeat(64),
+            helperSHA256: createHash('sha256')
+                .update(await readFile(testHelper))
+                .digest('hex'),
+            coreSHA256: createHash('sha256')
+                .update(await readFile(core))
+                .digest('hex')
+        }
+        await writeFile(testHelper + '.json', JSON.stringify(manifest))
+        await writeFile(join(root, 'helper-client.json'), JSON.stringify({ token }))
+        const helper = new HelperService(
+            root,
+            testHelper,
+            core,
+            () => {},
+            join(root, 'helper.sock')
+        )
+        const store = new Store(join(root, 'app'))
+        store.settings.port = await unusedPort()
+        const caPath = await ensureCertificate(join(store.directory, 'certificates'))
+        const ca = await readFile(caPath, 'utf8')
+        const key = await readFile(
+            join(store.directory, 'certificates/keys/ca.private.key'),
+            'utf8'
+        )
+        const issuer = forge.pki.certificateFromPem(ca)
+        const leaf = forge.pki.createCertificate()
+        leaf.publicKey = issuer.publicKey
+        leaf.serialNumber = '02'
+        leaf.validity.notBefore = new Date(Date.now() - 60000)
+        leaf.validity.notAfter = new Date(Date.now() + 86400000)
+        leaf.setSubject([{ name: 'commonName', value: 'localhost' }])
+        leaf.setIssuer(issuer.subject.attributes)
+        leaf.setExtensions([
+            { name: 'subjectAltName', altNames: [{ type: 2, value: 'localhost' }] }
+        ])
+        leaf.sign(forge.pki.privateKeyFromPem(key), forge.md.sha256.create())
+        const origin = http
+            .createServer((_req, res) => res.end('integrated HTTP'))
+            .listen(0, '127.0.0.1')
+        const secure = https
+            .createServer({ key, cert: forge.pki.certificateToPem(leaf) }, (_req, res) =>
+                res.end('integrated HTTPS')
+            )
+            .listen(0, '127.0.0.1')
+        await Promise.all([once(origin, 'listening'), once(secure, 'listening')])
+        const egressPort = await unusedPort()
+        const password = randomBytes(32).toString('base64url')
+        const engine = new ProxyEngine(store, () => {}, new https.Agent({ ca }))
+        engine.setTransportEgress(`http://fluxy:${password}@127.0.0.1:${egressPort}`)
+        engine.inspectorControl = () =>
+            helper.openTunInspector({
+                ...params(),
+                bridgePort: 0,
+                password,
+                egressPort,
+                inspector: { host: '127.0.0.1', port: store.settings.port }
+            })
+        try {
+            await engine.start()
+            const result = await execute('/bin/ps', ['-axo', 'pid=,ppid=,comm='])
+            const children = result.stdout
+                .split('\n')
+                .filter((line) => Number(line.trim().split(/\s+/)[1]) === worker.pid)
+            expect(children).toHaveLength(1)
+            expect(children[0]).toContain('sing-box')
+            expect(
+                result.stdout
+                    .split('\n')
+                    .filter(
+                        (line) =>
+                            Number(line.trim().split(/\s+/)[1]) === process.pid &&
+                            /\/sing-box$/.test(line)
+                    )
+            ).toHaveLength(0)
+            for (const [url, expected] of [
+                [
+                    `http://127.0.0.1:${(origin.address() as net.AddressInfo).port}/plain`,
+                    'integrated HTTP'
+                ],
+                [
+                    `https://localhost:${(secure.address() as net.AddressInfo).port}/secure`,
+                    'integrated HTTPS'
+                ]
+            ]) {
+                const response = await execute('/usr/bin/curl', [
+                    '--silent',
+                    '--show-error',
+                    '--fail',
+                    '--max-time',
+                    '10',
+                    '--noproxy',
+                    '',
+                    '--socks5-hostname',
+                    `127.0.0.1:${port}`,
+                    '--cacert',
+                    caPath,
+                    url
+                ])
+                expect(response.stdout).toBe(expected)
+            }
+            await expect
+                .poll(
+                    () =>
+                        [...engine.transactions.values()].filter((t) => t.state === 'completed')
+                            .length
+                )
+                .toBe(2)
+            await engine.stop()
+            await helper.stopTun()
+            expect((await helper.refresh()).state).toBe('ready')
+            await expect(
+                execute('/usr/bin/curl', ['--max-time', '1', `http://127.0.0.1:${egressPort}`])
+            ).rejects.toThrow()
+            await engine.start()
+            const restarted = (await execute('/bin/ps', ['-axo', 'pid=,ppid=,comm='])).stdout
+                .split('\n')
+                .find(
+                    (line) =>
+                        Number(line.trim().split(/\s+/)[1]) === worker.pid &&
+                        /\/sing-box$/.test(line)
+                )!
+            const corePID = Number(restarted.trim().split(/\s+/)[0])
+            worker.kill('SIGKILL')
+            await closed
+            await expect.poll(() => engine.running).toBe(false)
+            await expect
+                .poll(() => {
+                    try {
+                        process.kill(corePID, 0)
+                        return true
+                    } catch {
+                        return false
+                    }
+                })
+                .toBe(false)
+        } finally {
+            await engine.stop()
+            helper.close()
+            origin.closeAllConnections()
+            origin.close()
+            secure.closeAllConnections()
+            secure.close()
+            worker.kill()
+            await closed
+        }
+    }, 30000)
                 'unsupported helper method'
             )
             await expect(rpc.request('tun.start', { ...params(), config: {} })).rejects.toThrow(

@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events'
 import type { Writable } from 'node:stream'
 
-// Inherited stdin/stdout carry length-prefixed JSON; binary values use base64.
-// No control port is exposed to other local processes or captured applications.
+// Length-prefixed JSON travels over inherited pipes or the authenticated Helper
+// relay in TUN mode; binary values use base64.
 const MAX_MESSAGE = 144 * 1024 * 1024
 export class ProxyWire extends EventEmitter {
     private header = Buffer.alloc(4)

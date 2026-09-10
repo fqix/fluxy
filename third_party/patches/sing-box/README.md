@@ -52,9 +52,9 @@ The service's full documentation is included in the patch at
 
 Electron starts this service in its capture sing-box process and uses the service-tag
 outbound configuration. The same process owns the public listener and inspection;
-there is no separate inspection process or private inspection TCP port. TUN capture
-keeps its privileged TUN instance and bridge, with inspection in the unprivileged
-capture instance.
+there is no separate inspection process or private inspection TCP port. TUN capture uses one privileged Helper-owned instance containing both TUN and
+inspection. Electron attaches through an authenticated Helper IPC relay instead
+of starting its own core. The route to `fluxy-inspect` stays in process.
 
 `0004-network-startup-race.patch` uses an atomic startup flag in the upstream
 network manager. Its interface monitor runs asynchronously during startup; this

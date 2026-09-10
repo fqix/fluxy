@@ -1,17 +1,15 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdtemp, mkdir, readFile, writeFile, rm, access } from 'node:fs/promises'
+import { readFile, access } from 'node:fs/promises'
 import { constants } from 'node:fs'
-import { join } from 'node:path'
 import { networkInterfaces } from 'node:os'
 import { createHash, randomBytes } from 'node:crypto'
 import net from 'node:net'
 import { once } from 'node:events'
 import { setTimeout as delay } from 'node:timers/promises'
-import { TunBridge, connect } from './tun-bridge'
-import { tunConfig } from './tun-config'
+import { connect } from './tun-bridge'
 import type { HelperService } from '../system/helper'
-import { matchPattern, type TunStatus } from '../../shared/contracts/model'
+import { type TunStatus } from '../../shared/contracts/model'
 import type { Store } from '../storage/store'
 import type { ProxyEngine } from '../capture/proxy'
 
@@ -32,8 +30,6 @@ export class TunService {
     splitDNS?: SplitDNS
     status: TunStatus = { state: 'stopped', available: false }
     private helperStarted = false
-    private bridge?: TunBridge
-    private directory?: string
     private canceled = false
     private starting?: Promise<void>
     private stopping?: Promise<void>
@@ -131,57 +127,34 @@ export class TunService {
             await this.helper.ensureInstalled()
             if (this.canceled) throw new Error('TUN start canceled')
             await this.engine.stop()
-            const parent = join(this.store.directory, 'tun')
-            await mkdir(parent, { recursive: true, mode: 0o700 })
-            this.directory = await mkdtemp(join(parent, 'run-'))
             const password = randomBytes(32).toString('base64url')
             const egressPort = await unusedPort()
             const egress = `http://fluxy:${password}@127.0.0.1:${egressPort}`
-            this.bridge = new TunBridge(
-                this.store.settings.port,
-                egress,
-                password,
-                (host) =>
-                    this.store.settings.ssl &&
-                    this.store.settings.sslHosts.some((pattern) => matchPattern(pattern, host))
-            )
-            await this.bridge.start()
             const interfaceName = unusedTunInterfaceName(Object.keys(networkInterfaces()))
             this.ownedInterface = interfaceName
             this.setStatus({ interfaceName })
-            const config = join(this.directory, 'config.json')
-            await writeFile(
-                config,
-                JSON.stringify(
-                    tunConfig({
-                        settings,
-                        bridgePort: this.bridge.port,
-                        egressPort,
-                        password,
-                        interfaceName,
-                        egressInterface,
-                        splitDNS: this.splitDNS
-                    })
-                ),
-                { mode: 0o600 }
-            )
-            await execute(this.corePath, ['check', '-c', config], { timeout: 15000 })
             this.ownsEngine = true
+            this.workerOutput = ''
             this.engine.setTransportEgress(egress)
+            this.engine.inspectorControl = async () => {
+                if (this.canceled) throw new Error('TUN start canceled')
+                this.helperStarted = true
+                return this.helper!.openTunInspector({
+                    inspector: {
+                        host: this.store.settings.localhostOnly ? '127.0.0.1' : '0.0.0.0',
+                        port: this.store.settings.port
+                    },
+                    egressPort,
+                    password,
+                    interfaceName,
+                    egressInterface,
+                    socksPort: settings.socksPort,
+                    routeCIDRs: settings.routeCIDRs,
+                    ...(this.splitDNS ? { splitDNS: this.splitDNS } : {})
+                })
+            }
             await this.engine.start()
             if (this.canceled) throw new Error('TUN start canceled')
-            this.workerOutput = ''
-            this.helperStarted = true
-            await this.helper.startTun({
-                bridgePort: this.bridge.port,
-                egressPort,
-                password,
-                interfaceName,
-                egressInterface,
-                socksPort: settings.socksPort,
-                routeCIDRs: settings.routeCIDRs,
-                ...(this.splitDNS ? { splitDNS: this.splitDNS } : {})
-            })
             const deadline = Date.now() + 30000
             while (Date.now() < deadline) {
                 if (this.canceled) throw new Error('TUN start canceled')
@@ -252,6 +225,10 @@ export class TunService {
         return this.stopping
     }
     private async cleanup() {
+        if (this.ownsEngine) {
+            await this.engine.stop()
+            this.engine.inspectorControl = undefined
+        }
         if (this.helperStarted) {
             try {
                 await this.helper?.stopTun()
@@ -277,10 +254,6 @@ export class TunService {
             this.engine.setTransportEgress(undefined)
             this.ownsEngine = false
         }
-        await this.bridge?.stop()
-        this.bridge = undefined
-        if (this.directory) await rm(this.directory, { recursive: true, force: true })
-        this.directory = undefined
         this.ownedInterface = undefined
         this.setStatus({ interfaceName: undefined, splitDNS: false })
     }

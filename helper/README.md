@@ -8,7 +8,17 @@ Fluxy uses the same authenticated, newline-delimited JSON RPC protocol on all th
 | Linux with systemd | `internal/platform/platform_linux.go` | systemd, `pkexec` | Unix socket, paired UID and executable hash |
 | Windows 10/11 | `internal/platform/platform_windows.go` | Windows service, UAC | Named pipe, paired SID and executable hash |
 
-The Go helper accepts only status, typed TUN start/stop, and install/remove of a self-signed Fluxy root CA. It generates its own core configuration. It never accepts executable paths, shell commands, or arbitrary configuration files over RPC. Installation verifies staged binary and pairing checksums after copying into an administrator-owned directory. The application keeps a random pairing token in its private data directory.
+The Go helper accepts only status, typed TUN start/ready/stop, and install/remove of a self-signed Fluxy root CA. It generates its own core configuration. It never accepts executable paths, shell commands, or arbitrary configuration files over RPC. Installation verifies staged binary and pairing checksums after copying into an administrator-owned directory. The application keeps a random pairing token in its private data directory.
+
+TUN capture uses one helper-owned sing-box process containing the TUN inbound,
+the public mixed inbound, authenticated direct-egress ingress, and the embedded
+`fluxy-inspector` service. There is no second inspection process or HTTP inspection
+bridge. `tun.start` accepts an `inspector` listener description and returns a
+loopback control port. Electron authenticates to this one-use relay with the
+session's random token; the helper forwards the stream to the core's stdin/stdout.
+Unauthenticated connections cannot send inspection commands. Closing the control
+stream closes core stdin. After the inspector's ready frame, `tun.ready` waits for
+inbounds and installs scoped DNS before capture becomes running.
 
 One connection owns the TUN session. Disconnect or 20 seconds without a request stops its core. Core stdin EOF requests graceful shutdown, including when the helper crashes; Windows additionally uses a job object. Normal service stop also waits for the core to close. Application updates that change the paired executable require Helper repair.
 

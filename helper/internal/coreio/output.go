@@ -32,6 +32,13 @@ func (o *Output) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+// Contains checks readiness diagnostics without exposing the captured log.
+func (o *Output) Contains(message string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return strings.Contains(string(o.tail), message)
+}
+
 func (o *Output) Failure(label string, err error, password string) string {
 	o.mu.Lock()
 	defer o.mu.Unlock()

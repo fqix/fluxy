@@ -55,6 +55,8 @@ func serveConnection(ctx context.Context, c net.Conn, p protocol.Pairing, base s
 		case "status":
 		case "tun.stop":
 			err = s.Stop()
+		case "tun.ready":
+			err = s.Ready()
 		case "tun.start":
 			err = s.Start(req.Params)
 		case "ca.install", "ca.remove", "ca.add":
@@ -77,7 +79,7 @@ func serveConnection(ctx context.Context, c net.Conn, p protocol.Pairing, base s
 		if req.Method == "tun.start" && err == nil && !running {
 			err = errors.New(s.Error())
 		}
-		reply := map[string]any{"id": req.ID, "result": map[string]any{"buildID": p.BuildID, "tunRunning": running, "tunError": s.Error()}}
+		reply := map[string]any{"id": req.ID, "result": map[string]any{"buildID": p.BuildID, "tunRunning": running, "tunError": s.Error(), "controlPort": s.ControlPort()}}
 		if err != nil {
 			reply["error"] = err.Error()
 		}

@@ -9,7 +9,7 @@ import {
 import { matchesBreakpoint } from '../rules/rule-match'
 import { ProcessResolver } from './process-resolver'
 import type { CustomCertificates } from '../certificates/custom-certificates'
-import { Proxy, type IContext } from './inspector-transport'
+import { Proxy, type IContext, type InspectorControl } from './inspector-transport'
 import { bundledCorePath } from './sing-box-proxy'
 import http from 'node:http'
 import { isUtf8 } from 'node:buffer'
@@ -208,6 +208,7 @@ export class ProxyEngine {
         )
     }
     scriptRunner?: (script: Script, message: ScriptMessage) => Promise<ScriptMessage>
+    inspectorControl?: () => Promise<InspectorControl>
     private transportEgress?: string
     setTransportEgress(url?: string) {
         if (this.running) throw new Error('Stop capture before changing transport')
@@ -625,6 +626,7 @@ export class ProxyEngine {
                             host,
                             corePath: this.corePath,
                             directory: this.store.directory,
+                            openControl: this.inspectorControl,
                             sslCaDir: join(this.store.directory, 'certificates'),
                             keepAlive: true,
                             httpsAgent: this.routeAgent,

@@ -19,6 +19,9 @@ import (
 
 // Session owns the single core process one connection may run.
 type Session struct {
+	control       *inspectorControl
+	params        Params
+	ready         bool
 	base          string
 	child         *exec.Cmd
 	input         io.WriteCloser
@@ -36,6 +39,12 @@ func NewSession(base string) *Session { return &Session{base: base} }
 
 // Error reports why the core exited, if it did.
 func (s *Session) Error() string { return s.exitError }
+func (s *Session) ControlPort() int {
+	if s.control != nil {
+		return s.control.port()
+	}
+	return 0
+}
 
 func (s *Session) Running() bool {
 	if s.child == nil {
@@ -45,6 +54,9 @@ func (s *Session) Running() bool {
 	case err := <-s.done:
 		s.exitError = s.output.Failure("TUN core exited unexpectedly", err, s.password)
 		s.child = nil
+		if s.control != nil {
+			s.control.close()
+		}
 		s.input.Close()
 		s.release()
 		if s.dnsCleanup != nil {
@@ -61,6 +73,12 @@ func (s *Session) Running() bool {
 	}
 }
 func (s *Session) Stop() error {
+	if s.control != nil {
+		s.control.close()
+		<-s.control.done
+		s.control = nil
+	}
+	s.ready = false
 	if s.dnsCleanup != nil {
 		if err := s.dnsCleanup(); err != nil {
 			return err
@@ -132,17 +150,44 @@ func (s *Session) Start(raw json.RawMessage) error {
 	child := exec.Command(core, "run", "-c", path)
 	child.Env = append(platform.Env(), "FLUXY_HELPER_STDIN=1")
 	output := &coreio.Output{}
-	child.Stdout, child.Stderr = output, output
+	child.Stderr = output
+	if p.Inspector == nil {
+		child.Stdout = output
+	}
 	input, err := child.StdinPipe()
 	if err != nil {
 		return err
 	}
+	if p.Inspector != nil {
+		stdout, pipeErr := child.StdoutPipe()
+		if pipeErr != nil {
+			input.Close()
+			return pipeErr
+		}
+		s.control, err = newInspectorControl(input, stdout, p.Password)
+		if err != nil {
+			input.Close()
+			stdout.Close()
+			return err
+		}
+	}
 	if err = child.Start(); err != nil {
+		if s.control != nil {
+			s.control.close()
+			<-s.control.done
+			s.control = nil
+		}
+
 		input.Close()
 		return err
 	}
 	release, err := platform.ContainChild(child)
 	if err != nil {
+		if s.control != nil {
+			s.control.close()
+			<-s.control.done
+			s.control = nil
+		}
 		input.Close()
 		_ = child.Process.Kill()
 		_ = child.Wait()
@@ -156,7 +201,39 @@ func (s *Session) Start(raw json.RawMessage) error {
 	s.output = output
 	s.password = p.Password
 	s.interfaceName = p.InterfaceName
+	s.params = p
 	go func() { done <- child.Wait() }()
+	if p.Inspector != nil {
+		return nil
+	} // Desktop must send the inspector start frame first.
+	return s.Ready()
+}
+
+// Ready finishes network setup after the desktop initializes the inspector.
+func (s *Session) Ready() error {
+	if !s.Running() {
+		return errors.New("TUN core is not running: " + s.exitError)
+	}
+	if s.ready {
+		return nil
+	}
+	p := s.params
+	var err error
+	if p.Inspector != nil {
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if !s.Running() {
+				return errors.New(s.exitError)
+			}
+			if s.output.Contains("sing-box started (") {
+				break
+			}
+			if time.Now().After(deadline) {
+				return errors.New("TUN inbounds did not become ready")
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
 	if p.SplitDNS != nil && !protocol.Testing {
 		if err = splitdns.WaitReady(p.SplitDNS.Domains); err == nil {
 			s.dnsCleanup, err = splitdns.Start(p.InterfaceName, p.SplitDNS.Domains)
@@ -170,5 +247,6 @@ func (s *Session) Start(raw json.RawMessage) error {
 		}
 		splitdns.FlushCache()
 	}
+	s.ready = true
 	return nil
 }

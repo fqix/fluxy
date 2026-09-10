@@ -6,12 +6,18 @@ import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
-import { Duplex, PassThrough, Readable, Transform } from 'node:stream'
+import { Duplex, PassThrough, Readable, Transform, type Writable } from 'node:stream'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Transaction } from '../../shared/contracts/model'
 import { StreamChannel } from './proxy-stream'
 import { ProxyWire } from './proxy-wire'
+
+export interface InspectorControl {
+    stream: Duplex
+    ready(): Promise<void>
+    close(): Promise<void>
+}
 
 type RequestTiming = NonNullable<Transaction['timings']>
 type Done = (error?: Error | null) => void
@@ -96,6 +102,8 @@ export class Proxy {
     httpAgent!: http.Agent
     httpsAgent!: http.Agent
     private child?: ChildProcess
+    private control?: InspectorControl
+    private input?: Writable
     private directory?: string
     private stopping?: Promise<void>
     private wire?: ProxyWire
@@ -135,7 +143,7 @@ export class Proxy {
         this.errors.push(hook)
     }
     private send(message: Record<string, unknown>) {
-        if (this.child?.stdin?.writable && !this.child.stdin.destroyed) this.wire?.send(message)
+        if (this.input?.writable && !this.input.destroyed) this.wire?.send(message)
     }
     private fail(id: string, error: unknown) {
         const value = error instanceof Error ? error : new Error(String(error))
@@ -400,6 +408,7 @@ export class Proxy {
             timeout: number
             corePath: string
             directory: string
+            openControl?: () => Promise<InspectorControl>
         },
         done: Done
     ) {
@@ -410,27 +419,36 @@ export class Proxy {
             certificate: readFileSync(join(options.sslCaDir, 'certs/ca.pem'), 'utf8'),
             key: readFileSync(join(options.sslCaDir, 'keys/ca.private.key'), 'utf8')
         }
-        const prepared = await prepareProxyCore(
-            options.corePath,
-            options.directory,
-            options.host,
-            options.port
-        )
-        this.directory = prepared.directory
-        const child = (this.child = spawn(options.corePath, ['run', '-c', prepared.config], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-            windowsHide: true,
-            env: {
-                ...process.env,
-                FLUXY_HELPER_STDIN: '1',
-                FLUXY_HELPER_PARENT: String(process.pid)
-            }
-        }))
-        if (child.pid) ownedProxyPids.add(child.pid)
-        child.once('exit', () => {
-            if (child.pid) ownedProxyPids.delete(child.pid)
-        })
-        this.wire = new ProxyWire(child.stdin!)
+        let child: ChildProcess | undefined
+        if (options.openControl) {
+            this.control = await options.openControl()
+        } else {
+            const prepared = await prepareProxyCore(
+                options.corePath,
+                options.directory,
+                options.host,
+                options.port
+            )
+            this.directory = prepared.directory
+            child = this.child = spawn(options.corePath, ['run', '-c', prepared.config], {
+                stdio: ['pipe', 'pipe', 'pipe'],
+                windowsHide: true,
+                env: {
+                    ...process.env,
+                    FLUXY_HELPER_STDIN: '1',
+                    FLUXY_HELPER_PARENT: String(process.pid)
+                }
+            })
+            if (child.pid) ownedProxyPids.add(child.pid)
+            const owned = child
+            child.once('exit', () => {
+                if (owned.pid) ownedProxyPids.delete(owned.pid)
+            })
+        }
+        const control = this.control
+        const input = (this.input = control?.stream ?? child!.stdin!)
+        const output = control?.stream ?? child!.stdout!
+        this.wire = new ProxyWire(input)
         this.channel = new StreamChannel((message) => this.send(message))
         let settled = false,
             inspectorReady = false,
@@ -445,43 +463,58 @@ export class Proxy {
         }
         const fatal = (error: Error) => {
             finish(error)
-            if (this.child === child && coreReady && inspectorReady)
+            if (this.input === input && coreReady && inspectorReady)
                 this.errors.forEach((hook) => hook(null, error, 'INSPECTOR_EXIT'))
-            void this.close()
+            void this.close().catch(() => {})
         }
-        const timer = setTimeout(() => {
-            fatal(new Error(`sing-box inspector startup timed out: ${log}`))
-        }, 15000)
-        child.stdout?.on('data', (data) => {
+        const timer = setTimeout(
+            () => {
+                fatal(new Error(`sing-box inspector startup timed out: ${log}`))
+            },
+            control ? 30000 : 15000
+        )
+        output.on('data', (data) => {
             try {
                 this.wire?.receive(data)
             } catch (error) {
                 fatal(error instanceof Error ? error : new Error(String(error)))
             }
         })
-        child.stderr?.on('data', (data) => {
+        child?.stderr?.on('data', (data) => {
             log = (log + data).slice(-8000)
             if (log.includes('sing-box started (')) coreReady = true
             if (coreReady && inspectorReady) finish()
         })
-        child.on('error', fatal)
-        child.stdin?.on('error', fatal)
-        child.on('exit', (code) => {
+        child?.on('error', fatal)
+        input.on('error', fatal)
+        const onExit = (code: number | null) => {
             const error = new Error(`sing-box inspector exited (${code}): ${log}`)
             finish(error)
-            if (this.child === child)
+            if (this.input === input)
                 this.errors.forEach((hook) => hook(null, error, 'INSPECTOR_EXIT'))
             for (const id of this.states.keys())
                 this.fail(id, new Error('sing-box inspector stopped'))
             this.channel?.close()
-        })
+        }
+        child?.on('exit', onExit)
+        control?.stream.on('close', () => onExit(null))
         this.wire.on('message', (message: any) => {
             if (message.type === 'ready') {
                 this.port = message.port
                 inspectorReady = true
-                if (coreReady) finish()
+                if (control) {
+                    void control
+                        .ready()
+                        .then(() => {
+                            if (this.input !== input) return
+                            coreReady = true
+                            finish()
+                        })
+                        .catch(fatal)
+                } else if (coreReady) finish()
             } else void this.message(message).catch((error) => this.fail(message.id, error))
         })
+        control?.stream.resume()
         this.send({
             type: 'start',
             port: options.port,
@@ -501,6 +534,10 @@ export class Proxy {
                 : Promise.resolve()
         this.channel?.close()
         this.child = undefined
+        this.input = undefined
+        const control = this.control
+        this.control = undefined
+        control?.stream.destroy()
         child?.stdin?.end()
         child?.kill()
         const force = setTimeout(() => child?.kill('SIGKILL'), 2000)
@@ -512,6 +549,7 @@ export class Proxy {
         this.tunnels.clear()
         await exited
         clearTimeout(force)
+        await control?.close()
         if (this.directory) await rm(this.directory, { recursive: true, force: true })
         this.directory = undefined
     }
