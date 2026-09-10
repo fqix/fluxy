@@ -622,6 +622,10 @@ export class HelperService {
                 await this.desktopCertificate('untrust-ca-desktop', der)
                 return
             }
+            if (process.platform === 'win32') {
+                await this.authorizeCertificate(der, 'remove')
+                return
+            }
             await this.operation('ca.remove', der.toString('base64'), 90000, false)
         })().finally(() => {
             this.trusting = undefined
@@ -646,6 +650,15 @@ export class HelperService {
     private async authorizeCertificate(der: Buffer, action: 'install' | 'remove') {
         const manifest = await this.assets(false)
         if (this.closing) throw new Error('Fluxy is closing')
+        if (process.platform === 'win32') {
+            await this.authorize(
+                JSON.stringify({
+                    action: `${action}-certificate`,
+                    certificate: der.toString('base64')
+                })
+            )
+            return
+        }
         const script = certificateScript(action, {
             certificate: der,
             helperPath: this.helperPath,
@@ -666,6 +679,10 @@ export class HelperService {
             return Promise.reject(new Error('Wait for certificate trust removal to finish'))
         if (this.trusting) return this.trusting
         this.trusting = (async () => {
+            if (process.platform === 'win32') {
+                await this.authorizeCertificate(der, 'install')
+                return
+            }
             if (process.platform !== 'darwin') {
                 await this.operation('ca.install', der.toString('base64'), 90000)
                 return

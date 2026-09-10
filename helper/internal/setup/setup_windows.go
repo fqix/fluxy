@@ -3,6 +3,7 @@ package setup
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -17,6 +18,7 @@ import (
 	"time"
 	"unsafe"
 
+	"dev.fengqi.fluxy/helper/internal/certs"
 	"dev.fengqi.fluxy/helper/internal/protocol"
 	"dev.fengqi.fluxy/helper/internal/winnet"
 	"github.com/Microsoft/go-winio"
@@ -31,9 +33,20 @@ type setupRequest struct {
 	HelperSHA256  string `json:"helperSHA256,omitempty"`
 	CoreSHA256    string `json:"coreSHA256,omitempty"`
 	PairingSHA256 string `json:"pairingSHA256,omitempty"`
+	Certificate   string `json:"certificate,omitempty"`
 }
 
 func (r setupRequest) validate() error {
+	if r.Action == "install-certificate" || r.Action == "remove-certificate" {
+		if r.Stage != "" || r.HelperSHA256 != "" || r.CoreSHA256 != "" || r.PairingSHA256 != "" {
+			return errors.New("certificate request cannot modify Helper installation")
+		}
+		_, err := r.parseCertificate()
+		return err
+	}
+	if r.Certificate != "" {
+		return errors.New("unexpected setup certificate")
+	}
 	if r.Action == "uninstall" && r.Stage == "" && r.HelperSHA256 == "" && r.CoreSHA256 == "" && r.PairingSHA256 == "" {
 		return nil
 	}
@@ -46,6 +59,18 @@ func (r setupRequest) validate() error {
 		}
 	}
 	return nil
+}
+
+func (r setupRequest) parseCertificate() (*x509.Certificate, error) {
+	raw, _ := json.Marshal(r.Certificate)
+	cert, err := certs.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if r.Action == "install-certificate" && (time.Now().Before(cert.NotBefore) || time.Now().After(cert.NotAfter)) {
+		return nil, errors.New("certificate expired or not yet valid")
+	}
+	return cert, nil
 }
 
 // ShellExecuteEx invokes the UAC broker directly; no command interpreter is involved.
@@ -294,6 +319,21 @@ func stopSetupService(s *mgr.Service) error {
 	return nil
 }
 func performNativeSetup(r setupRequest) (resultErr error) {
+	// Certificate management must work even after the service was removed or
+	// its executable pairing became stale. Only the typed CA operation is elevated.
+	if err := r.validate(); err != nil {
+		return err
+	}
+	if r.Action == "install-certificate" || r.Action == "remove-certificate" {
+		cert, err := r.parseCertificate()
+		if err != nil {
+			return err
+		}
+		if err = certs.Trust(cert, r.Action == "install-certificate", ""); err != nil {
+			return fmt.Errorf("Windows %s: %w", r.Action, err)
+		}
+		return nil
+	}
 	step := "locate Program Files"
 	defer func() {
 		if resultErr != nil {

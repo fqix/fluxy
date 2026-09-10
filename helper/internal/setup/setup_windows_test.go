@@ -1,17 +1,72 @@
 package setup
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/hex"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unsafe"
 
 	"dev.fengqi.fluxy/helper/internal/winnet"
 	"golang.org/x/sys/windows"
 )
+
+func TestCertificateSetupValidation(t *testing.T) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, scenario := range []struct {
+		name       string
+		expired    bool
+		commonName string
+	}{
+		{"valid", false, "Fluxy Electron Root CA"},
+		{"expired", true, "Fluxy Electron Root CA"},
+		{"unrelated", false, "Other Root CA"},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			until := time.Now().Add(time.Hour)
+			if scenario.expired {
+				until = time.Now().Add(-time.Hour)
+			}
+			template := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: scenario.commonName}, NotBefore: time.Now().Add(-2 * time.Hour), NotAfter: until, IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+			der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, action := range []string{"install-certificate", "remove-certificate"} {
+				r := setupRequest{Action: action, Certificate: base64.StdEncoding.EncodeToString(der)}
+				wantValid := scenario.name != "unrelated" && (!scenario.expired || action == "remove-certificate")
+				if (r.validate() == nil) != wantValid {
+					t.Fatalf("unexpected validation for %s", action)
+				}
+				r.Stage = `C:\stage`
+				if r.validate() == nil {
+					t.Fatal("certificate operation accepted installer fields")
+				}
+			}
+		})
+	}
+	for _, r := range []setupRequest{
+		{Action: "install-certificate"}, {Action: "remove-certificate", Certificate: "bad"},
+		{Action: "uninstall", Certificate: "unexpected"},
+	} {
+		if r.validate() == nil {
+			t.Fatal("accepted invalid certificate request")
+		}
+	}
+}
 
 func TestNativeSetupValidation(t *testing.T) {
 	hash := strings.Repeat("a", 64)

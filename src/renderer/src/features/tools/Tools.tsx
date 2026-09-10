@@ -708,7 +708,9 @@ export function Certificates({ snapshot, run }: { snapshot: Snapshot; run: Run }
                 Fluxy keeps the same certificate across restarts.
                 {window.fluxy.platform === 'darwin'
                     ? ' macOS asks for authorization when trust needs to change. The Helper service is not required.'
-                    : ' Install Helper Tool first to manage system certificate trust.'}
+                    : window.fluxy.platform === 'win32'
+                      ? ' Windows asks for administrator approval to install or remove trust.'
+                      : ' Install Helper Tool first to manage system certificate trust.'}
             </p>
             <HeaderTable
                 values={{
