@@ -514,6 +514,13 @@ exec /bin/zsh -i
         await capture.stop()
         await certificateTrust.remove()
         emit({ type: 'state' })
+        await dialog.showMessageBox(window!, {
+            type: 'info',
+            title: 'Fluxy',
+            message: 'Certificate uninstalled successfully.',
+            detail: 'Fluxy certificate trust has been removed. You can reinstall it at any time.',
+            buttons: ['OK']
+        })
         return true
     })
     handle('certificate:reset', async () => {
@@ -874,6 +881,13 @@ exec /bin/zsh -i
         await certificateTrust.waitForSystemTrust()
         await certificateTrust.sync(true)
         engine.log('Root CA installed and trusted. Restart clients before capturing HTTPS.')
+        await dialog.showMessageBox(window!, {
+            type: 'info',
+            title: 'Fluxy',
+            message: 'Certificate installed and trusted successfully.',
+            detail: 'Restart your browser or client app before capturing HTTPS traffic.',
+            buttons: ['OK']
+        })
         return true
     })
     handle('systemProxy', async (enabled) => {
