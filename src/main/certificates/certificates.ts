@@ -9,6 +9,18 @@ import { promisify } from 'node:util'
 import type { CertificateStatus } from '../../shared/contracts/model'
 
 const generating = new Map<string, Promise<string>>()
+
+export async function requireTunCertificate(directory: string, customPath?: string) {
+    const status = await certificateStatus(directory, customPath)
+    if (status.error) throw new Error(`Cannot start TUN: ${status.error}`)
+    if (!status.generated || !status.trusted)
+        throw new Error(
+            customPath
+                ? 'Cannot start TUN: install and trust the active custom root certificate in your operating system certificate manager first.'
+                : 'Cannot start TUN: install and trust the Fluxy root certificate first. Open Certificate → Install Certificate.'
+        )
+}
+
 export function ensureCertificate(directory: string): Promise<string> {
     const pending = generating.get(directory)
     if (pending) return pending

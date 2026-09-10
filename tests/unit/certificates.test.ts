@@ -3,7 +3,11 @@ import { mkdtemp, rm, access, readFile, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { X509Certificate } from 'node:crypto'
-import { certificateStatus, ensureCertificate } from '../../src/main/certificates/certificates'
+import {
+    certificateStatus,
+    ensureCertificate,
+    requireTunCertificate
+} from '../../src/main/certificates/certificates'
 import { nativeWindowsQuery } from '../../src/main/tun/native-windows'
 
 vi.mock('../../src/main/tun/native-windows', () => ({ nativeWindowsQuery: vi.fn() }))
@@ -14,6 +18,31 @@ beforeEach(() => {
 afterEach(() => Object.defineProperty(process, 'platform', platform))
 
 describe('setup certificate identity', () => {
+    it('checks live trust before TUN startup without generating or installing a CA', async () => {
+        Object.defineProperty(process, 'platform', { value: 'win32' })
+        const directory = await mkdtemp(join(tmpdir(), 'fluxy-tun-ca-'))
+        try {
+            await expect(requireTunCertificate(directory)).rejects.toThrow('install and trust')
+            await expect(access(join(directory, 'certs/ca.pem'))).rejects.toThrow()
+            const path = await ensureCertificate(directory)
+            await expect(requireTunCertificate(directory)).rejects.toThrow('install and trust')
+            vi.mocked(nativeWindowsQuery).mockResolvedValue(true)
+            await expect(requireTunCertificate(directory)).resolves.toBeUndefined()
+            vi.mocked(nativeWindowsQuery).mockResolvedValue(false)
+            await expect(requireTunCertificate(directory)).rejects.toThrow('install and trust')
+            await expect(requireTunCertificate(directory, path)).rejects.toThrow(
+                'active custom root'
+            )
+            vi.mocked(nativeWindowsQuery).mockResolvedValue(true)
+            await expect(requireTunCertificate(directory, path)).resolves.toBeUndefined()
+            vi.mocked(nativeWindowsQuery).mockRejectedValue(new Error('query failed'))
+            await expect(requireTunCertificate(directory)).rejects.toThrow(
+                'trust could not be checked'
+            )
+        } finally {
+            await rm(directory, { recursive: true, force: true })
+        }
+    })
     it('checks fresh setup without generating a certificate or key', async () => {
         const directory = await mkdtemp(join(tmpdir(), 'fluxy-status-'))
         try {

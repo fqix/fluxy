@@ -30,7 +30,11 @@ import { ScriptRunner } from '../rules/scripting'
 import { MCPService } from '../integrations/mcp'
 import { SystemProxy } from '../system/system-proxy'
 import { CaptureController } from '../capture/capture'
-import { ensureCertificate, certificateStatus } from '../certificates/certificates'
+import {
+    ensureCertificate,
+    certificateStatus,
+    requireTunCertificate
+} from '../certificates/certificates'
 import { CertificateTrust } from '../certificates/certificate-trust'
 import {
     highlightSchema,
@@ -1008,6 +1012,11 @@ else {
                 tun,
                 systemProxy,
                 async (signal, automatic) => {
+                    await requireTunCertificate(
+                        join(store.directory, 'certificates'),
+                        customCertificates.publicRootPath()
+                    )
+                    if (signal.aborted) return false
                     tun.splitDNS = undefined
                     if (
                         store.settings.tun.socksPort ||

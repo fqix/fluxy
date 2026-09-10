@@ -135,6 +135,26 @@ describe('automatic system proxy capture', () => {
 })
 
 describe('TUN exit preparation', () => {
+    it('blocks manual and automatic startup when certificate checks fail, then allows retry', async () => {
+        const { settings, engine, tun, proxy } = setup()
+        settings.captureMode = 'tun'
+        settings.autoStart = true
+        proxy.enabled = true
+        const prepare = vi
+            .fn()
+            .mockRejectedValue(
+                new Error('Cannot start TUN: install and trust the Fluxy root certificate first.')
+            )
+        const capture = new CaptureController(() => settings, engine, tun, proxy, prepare)
+        await expect(capture.start()).rejects.toThrow('install and trust')
+        await expect(capture.restore()).rejects.toThrow('install and trust')
+        expect(tun.start).not.toHaveBeenCalled()
+        expect(engine.start).not.toHaveBeenCalled()
+        expect(proxy.set).not.toHaveBeenCalled()
+        prepare.mockResolvedValue(true)
+        await capture.start()
+        expect(tun.start).toHaveBeenCalledOnce()
+    })
     it.each([
         { domains: [], error: 'at least one capture domain' },
         { domains: ['   '], error: 'nonempty capture domain' },
