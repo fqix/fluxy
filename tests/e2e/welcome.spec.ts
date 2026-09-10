@@ -29,8 +29,8 @@ test('first-run setup reads real status, handles cancellation and persists expli
         await expect(welcome.getByRole('listitem')).toHaveCount(3)
         await expect(welcome.getByRole('listitem').first()).toContainText('Helper Setup')
         const installCA = welcome.getByRole('button', { name: 'Install CA', exact: true })
-        if (process.platform === 'darwin') await expect(installCA).toBeEnabled()
-        else await expect(installCA).toBeDisabled()
+        if (process.platform === 'linux') await expect(installCA).toBeDisabled()
+        else await expect(installCA).toBeEnabled()
         await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
         const captureDomains = welcome.getByRole('textbox', {
             name: 'Capture domains',
@@ -118,7 +118,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
         await expect(access(join(directory, 'certificates/certs/ca.pem'))).rejects.toThrow()
         await expect(welcome.getByRole('alert').first()).toBeVisible()
         await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
-        if (process.platform === 'darwin') {
+        if (process.platform !== 'linux') {
             await welcome.getByRole('button', { name: 'Install CA', exact: true }).click()
             await expect(welcome.getByRole('alert').first()).toContainText('Authorization canceled')
             expect((await page.evaluate(() => window.fluxy.helperStatus())).state).not.toBe('ready')
