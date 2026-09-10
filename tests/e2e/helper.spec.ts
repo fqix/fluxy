@@ -109,7 +109,10 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                 const originalDialog = _electron.dialog.showMessageBox
                 _electron.dialog.showMessageBox = (async (...args: unknown[]) => {
                     const options = args.at(-1) as { message?: string }
-                    if (options.message === 'Uninstall Fluxy Helper?')
+                    if (
+                        options.message === 'Uninstall Fluxy Helper?' ||
+                        options.message === 'Uninstall Fluxy Certificate?'
+                    )
                         return {
                             response: state.uninstallConfirmed ? 1 : 0,
                             checkboxChecked: false
@@ -133,6 +136,11 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                     })
                     worker.stdin.on('finish', () => {
                         const request = JSON.parse(input) as { command: string }
+                        if (request.command.includes('remove-ca-privileged')) {
+                            state.caRemovalCount++
+                            setTimeout(() => worker.emit('close', 0), 10)
+                            return
+                        }
                         if (request.command.includes('uninstall stopped')) {
                             if (state.uninstallAuthCanceled) {
                                 worker.stderr.write('Uninstall authorization canceled')
@@ -174,21 +182,22 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         await patch(app)
         let page = await app.firstWindow()
         let welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
-        await welcome.getByRole('button', { name: 'Set Up', exact: true }).click()
+        await expect(welcome.getByRole('status')).toHaveText('0 of 3 complete')
+        await welcome.getByRole('button', { name: 'Install Helper', exact: true }).click()
         // Installing copies and verifies the bundled binaries before starting the helper.
         // Allow bounded startup time for the real signed application and helper.
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete', {
+        await expect(welcome.getByRole('status')).toHaveText('1 of 3 complete', {
             timeout: 20000
         })
         expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
         helperPID = await app.evaluate(
             () => (process as typeof process & { testHelperPID?: number }).testHelperPID
         )
-        // The fixture installs only the rootless helper, never system trust.
-        await expect(welcome.getByRole('alert')).toContainText(
-            'certificate trust verification failed'
-        )
+        // Helper installation no longer creates or trusts the CA.
+        await expect(welcome.getByRole('alert')).toHaveCount(0)
+        expect((await page.evaluate(() => window.fluxy.certificateStatus())).generated).toBe(false)
+        await welcome.getByRole('button', { name: 'Install CA', exact: true }).click()
+        await expect(welcome.getByRole('alert')).toContainText('CA mutations are disabled')
         expect((await page.evaluate(() => window.fluxy.certificateStatus())).generated).toBe(true)
         for (let i = 0; i < 2; i++) {
             await expect(page.evaluate(() => window.fluxy.trustCertificate())).rejects.toThrow(
@@ -208,7 +217,7 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
         await expect(
             page.getByRole('dialog', { name: 'Welcome to Fluxy' }).getByRole('status')
-        ).toHaveText('0 of 2 complete')
+        ).toHaveText('1 of 3 complete')
         expect(
             await app.evaluate(
                 () => (process as typeof process & { helperAuthCount: number }).helperAuthCount
@@ -248,21 +257,16 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(0)
         await app.evaluate(() => {
             ;(process as any).uninstallConfirmed = true
-            ;(process as any).uninstallAuthCanceled = true
+            ;(process as any).uninstallAuthCanceled = false
         })
-        await uninstall.click()
-        await expect(page.getByRole('alert').first()).toContainText('CA mutations are disabled')
-        expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(0)
-        await access(join(data, 'helper-client.json'))
-        expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
         await app.evaluate(() => {
-            ;(process as any).simulateCARemoval = true
+            ;(process as any).uninstallAuthCanceled = true
         })
         await uninstall.click()
         await expect(page.getByRole('alert').first()).toContainText(
             'Uninstall authorization canceled'
         )
-        expect(await app.evaluate(() => (process as any).caRemovalCount)).toBe(1)
+        expect(await app.evaluate(() => (process as any).caRemovalCount)).toBe(0)
         expect((await page.evaluate(() => window.fluxy.snapshot())).running).toBe(false)
         await access(join(data, 'helper-client.json'))
         expect((await page.evaluate(() => window.fluxy.helperStatus())).state).toBe('ready')
@@ -278,16 +282,40 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         expect(await readFile(join(data, 'certificates/certs/ca.pem'), 'utf8')).toBe(ca)
         await expect(uninstall).toBeDisabled()
         expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(2)
-        expect(await app.evaluate(() => (process as any).caRemovalCount)).toBe(2)
+        expect(await app.evaluate(() => (process as any).caRemovalCount)).toBe(0)
+        await expect(access(join(data, 'browser-ca-disabled'))).rejects.toThrow()
+        await page.getByRole('button', { name: 'Close dialog' }).click()
+        await expect
+            .poll(() =>
+                app.evaluate(
+                    ({ Menu }) =>
+                        Menu.getApplicationMenu()!.getMenuItemById('uninstall-certificate')!.enabled
+                )
+            )
+            .toBe(true)
+        await app.evaluate(({ Menu }) => {
+            const item = Menu.getApplicationMenu()!.getMenuItemById('uninstall-certificate')!
+            if (!item.enabled) throw new Error('Certificate uninstall unavailable without Helper')
+            item.click()
+        })
+        await expect.poll(() => app.evaluate(() => (process as any).caRemovalCount)).toBe(1)
+        await expect
+            .poll(() => page.evaluate(() => window.fluxy.helperStatus()))
+            .toMatchObject({ state: 'missing' })
         await access(join(data, 'browser-ca-disabled'))
-        await page.getByRole('button', { name: 'Set Up Helper & CA', exact: true }).click()
+        expect(await readFile(join(data, 'certificates/certs/ca.pem'), 'utf8')).toBe(ca)
+
+        await app.evaluate(({ Menu }) =>
+            Menu.getApplicationMenu()!.getMenuItemById('Helper Tool')!.click()
+        )
+        await page.getByRole('button', { name: 'Install Helper', exact: true }).click()
         await expect
             .poll(async () => (await page.evaluate(() => window.fluxy.snapshot())).helper.state, {
                 timeout: 20000
             })
             .toBe('ready')
         helperPID = await app.evaluate(() => (process as any).testHelperPID)
-        expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(3)
+        expect(await app.evaluate(() => (process as any).helperAuthCount)).toBe(4)
     } finally {
         if (!helperPID)
             helperPID = await app

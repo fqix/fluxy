@@ -418,6 +418,7 @@ export interface FluxyAPI {
     templates(value: BreakpointTemplate[]): Promise<void>
     shortcuts(): Promise<{ label: string; accelerator: string }[]>
     menuState(state: MenuState): Promise<void>
+    uninstallCertificate(): Promise<boolean>
     resetCertificates(): Promise<boolean>
     resetHelper(): Promise<boolean>
     helperStatus(): Promise<HelperStatus>

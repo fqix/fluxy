@@ -129,7 +129,8 @@ function registerIPC() {
                     'helper:uninstall',
                     'helper:reset',
                     'certificate:trust',
-                    'certificate:reset'
+                    'certificate:reset',
+                    'certificate:uninstall'
                 ].includes(channel)
             )
                 return certificateTrust.exclusive(async () => {
@@ -500,6 +501,21 @@ exec /bin/zsh -i
         await writePrivateFile(filePath, payload)
         return filePath
     })
+    handle('certificate:uninstall', async () => {
+        const answer = await dialog.showMessageBox(window!, {
+            type: 'warning',
+            message: 'Uninstall Fluxy Certificate?',
+            detail: 'Capture will stop. This removes the Fluxy root CA from system and browser trust stores. The local certificate identity is kept for reinstallation. Custom certificates and the Helper service are kept.',
+            buttons: ['Cancel', 'Uninstall'],
+            defaultId: 0,
+            cancelId: 0
+        })
+        if (answer.response !== 1) return false
+        await capture.stop()
+        await certificateTrust.remove((der) => helper.removeCertificate(der, true))
+        emit({ type: 'state' })
+        return true
+    })
     handle('certificate:reset', async () => {
         if (engine.running || tun.status.state !== 'stopped')
             throw new Error('Stop capture before resetting certificates')
@@ -535,44 +551,19 @@ exec /bin/zsh -i
         return true
     })
     handle('helper:status', () => helper.refresh())
-    handle('helper:install', async () => {
-        if (customCertificates.rootIdentity())
-            throw new Error(
-                'A custom root issuer is active. Configure its trust separately before Helper setup.'
-            )
-        const directory = join(store.directory, 'certificates')
-        await ensureCertificate(directory)
-        const before = await certificateStatus(directory)
-        if (before.error) throw new Error(before.error)
-        const der = new X509Certificate(await readFile(engine.certificatePath)).raw
-        await helper.refresh()
-        if (process.platform === 'darwin') {
-            await helper.install(before.trusted ? undefined : der)
-        } else {
-            await helper.install()
-            if (!before.trusted) await helper.installCertificate(der)
-        }
-        const after = await certificateStatus(directory)
-        if (!after.trusted)
-            throw new Error(
-                after.error ||
-                    'Helper installed, but certificate trust verification failed. Retry Helper & Certificate Setup.'
-            )
-        await certificateTrust.sync(true)
-    })
+    handle('helper:install', () => helper.install())
     handle('helper:uninstall', async () => {
         if (!supportedHelperPlatform()) throw new Error('Unsupported helper platform')
         const answer = await dialog.showMessageBox(window!, {
             type: 'warning',
             message: 'Uninstall Fluxy Helper?',
-            detail: 'Capture will stop. This removes the Electron helper service, its installed programs and pairing information. The Fluxy root CA will be removed from system and browser trust stores. Saved traffic, preferences and custom CA trust are kept. Your operating system will request administrator authorization. TUN requires installing the helper again.',
+            detail: 'Capture will stop. This removes the Electron helper service, its installed programs and pairing information. Certificates and their system and browser trust, saved traffic and preferences are kept. Your operating system will request administrator authorization. TUN requires installing the helper again.',
             buttons: ['Cancel', 'Uninstall'],
             defaultId: 0,
             cancelId: 0
         })
         if (answer.response !== 1) return false
         await capture.stop()
-        await certificateTrust.remove()
         await helper.uninstall()
         emit({ type: 'state' })
         return true
@@ -878,15 +869,9 @@ exec /bin/zsh -i
         await ensureCertificate(join(store.directory, 'certificates'))
         const der = new X509Certificate(await readFile(engine.certificatePath)).raw
         const existing = await certificateStatus(join(store.directory, 'certificates'))
+        if (existing.error) throw new Error(existing.error)
         if (!existing.trusted) await helper.installCertificate(der)
-        const status = await certificateStatus(
-            join(store.directory, 'certificates'),
-            customCertificates.publicRootPath()
-        )
-        if (!status.trusted)
-            throw new Error(
-                status.error || 'CA installation finished, but system trust verification failed'
-            )
+        await certificateTrust.waitForSystemTrust()
         await certificateTrust.sync(true)
         engine.log(
             'Root CA installed and trusted through Helper Tool. Restart clients before capturing HTTPS.'

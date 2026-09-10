@@ -48,7 +48,14 @@ Tests use temporary sockets/pipes, generated certificates, and a harmless child-
 
 On macOS, a validated `splitDNS` TUN profile captures only a dedicated Fake IP pool and the internal DNS address. The helper waits for the internal DNS to answer before registering a supplemental resolver for at least one validated capture domain (empty or invalid domain lists are rejected before starting the resolver). The same domain suffixes constrain Fake IP answers. A persistent `scutil` session owns a temporary Dynamic Store key; closing its stdin or losing the helper removes that key without overwriting another network service. No arbitrary resolver keys or shell commands are accepted over RPC. Split DNS process-lifecycle tests use a fixture process and do not alter host DNS.
 
-The desktop Helper & Certificate Setup operation generates or reuses the local CA. On macOS, Authorization Services launches one elevated installer. After checksum-verified installation succeeds, the installed helper runs the desktop-only `trust-ca-privileged` CLI command with public DER supplied through stdin. That elevated process inserts the certificate and calls Security.framework directly, then verifies the admin trust record. It does not launch another desktop trust authorizer after installation. This follows kube-loop commit `79d2fa6b`. The command is not exposed through daemon RPC, rejects non-root callers, and is disabled in the rootless test helper. Helper installation failures skip CA changes; CA failures remain visible, without automatic fallback to a second authorization. An already installed helper can still service a certificate-only retry through the existing desktop trust flow. Existing trusted CAs are reused.
+Welcome presents Helper installation and CA installation as separate steps.
+`helper:install` only installs or updates the helper; it does not create or trust a
+certificate. After the helper is ready, `certificate:trust` generates or reuses the
+local CA, inserts its public certificate via the helper, and requests certificate
+trust from the logged-in desktop session. Existing trusted CAs are reused, and CA
+cancellation leaves the installed helper available for a separate retry. TUN capture
+is enabled only after both steps are ready. The native combined-install capability
+remains available internally but is not used by the Welcome workflow.
 
 Tests verify sequencing, public-certificate transport, failure propagation and privilege guards without mutating system trust. They do not prove the number of native authorization dialogs. A clean first-install acceptance run on the target macOS must verify both the resulting certificate trust and the actual dialog count.
 
@@ -71,13 +78,13 @@ keychain certificate. Cancellation or an unavailable desktop session stops delet
 Expired self-signed Fluxy roots remain removable. The desktop command is disabled
 in rootless test helpers; tests simulate authorization and do not alter system trust.
 
-The macOS **Helper uninstall** action combines certificate removal and service
-uninstallation in one desktop authorization request. The elevated shell first
+The macOS **Helper uninstall** action stops capture and removes only the helper service.
+Certificates and system/browser trust are preserved. **Certificate → Uninstall Certificate…**
+removes CA trust separately, even after Helper has been uninstalled. Its elevated shell
 copies the bundled helper into a root-owned temporary directory and checks its
 SHA-256, then invokes `remove-ca-privileged` with the public Fluxy CA. This retains
 the desktop authorization session instead of asking the launchd daemon to prompt.
-Only successful certificate removal permits service and program deletion. Browser
-trust cleanup follows; saved traffic and custom CA trust remain unchanged. The
-standalone certificate-removal action continues to use `untrust-ca-desktop`.
+Browser trust cleanup follows successful system removal. Saved traffic, custom CA
+trust and the local CA identity remain unchanged.
 Tests verify one application authorization request and failure ordering; actual
 macOS authorization dialog counts require a native interactive acceptance run.

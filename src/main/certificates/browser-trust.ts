@@ -17,7 +17,7 @@ const runCertutil: Run = async (args) => {
     } catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT')
             throw new Error(
-                'Browser CA setup requires certutil. Install libnss3-tools (Debian/Ubuntu) or nss-tools (Fedora), then retry Helper & Certificate Setup.'
+                'Browser CA setup requires certutil. Install libnss3-tools (Debian/Ubuntu) or nss-tools (Fedora), then retry CA installation.'
             )
         throw error
     }

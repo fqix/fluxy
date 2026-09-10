@@ -102,6 +102,8 @@ describe('application menu', () => {
         expect(find(menu({ running: true }, 'win32'), 'system-proxy').enabled).toBe(true)
         expect(find(menu({ running: true }, 'linux'), 'system-proxy').enabled).toBe(true)
         expect(find(menu({}), 'uninstall-helper').enabled).toBe(true)
+        expect(find(menu({}), 'uninstall-certificate').enabled).toBe(true)
+        expect(find(menu({ transportBusy: true }), 'uninstall-certificate').enabled).toBe(false)
         expect(find(menu({}, 'win32'), 'uninstall-helper').enabled).toBe(false)
         expect(find(menu({}, 'linux'), 'uninstall-helper').enabled).toBe(false)
     })

@@ -25,11 +25,12 @@ test('first-run setup reads real status, handles cancellation and persists expli
         let page = await app.firstWindow()
         let welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
         await expect(welcome).toBeVisible()
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
-        await expect(welcome.getByRole('listitem')).toHaveCount(2)
-        await expect(welcome.getByRole('listitem').first()).toContainText(
-            'Helper & Certificate Setup'
-        )
+        await expect(welcome.getByRole('status')).toHaveText('0 of 3 complete')
+        await expect(welcome.getByRole('listitem')).toHaveCount(3)
+        await expect(welcome.getByRole('listitem').first()).toContainText('Helper Setup')
+        await expect(
+            welcome.getByRole('button', { name: 'Install CA', exact: true })
+        ).toBeDisabled()
         await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
         const captureDomains = welcome.getByRole('textbox', {
             name: 'Capture domains',
@@ -81,7 +82,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
         expect(initial.running).toBe(false)
         expect(initial.systemProxy).toBe(false)
         await welcome.getByRole('checkbox', { name: 'Show on startup' }).uncheck()
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
+        await expect(welcome.getByRole('status')).toHaveText('0 of 3 complete')
         await welcome.getByRole('button', { name: 'Close', exact: true }).click()
         expect(
             (await page.evaluate(() => window.fluxy.snapshot())).settings.onboardingCompleted
@@ -91,7 +92,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
         page = await app.firstWindow()
         welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
         await expect(welcome).toBeVisible() // Close is not completion, even with startup unchecked.
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
+        await expect(welcome.getByRole('status')).toHaveText('0 of 3 complete')
         await expect(
             welcome.getByRole('textbox', { name: 'Capture domains', exact: true })
         ).toHaveValue('github.com\ngoogle.com')
@@ -109,20 +110,23 @@ test('first-run setup reads real status, handles cancellation and persists expli
                       )
                     : Reflect.apply(original, cp, [file, ...args])) as typeof cp.spawn
         })
-        await welcome.getByRole('button', { name: 'Set Up', exact: true }).click()
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete', { timeout: 20000 })
-        await expect(welcome.getByRole('alert')).toContainText('Authorization canceled')
+        await welcome.getByRole('button', { name: 'Install Helper', exact: true }).click()
+        await expect(welcome.getByRole('status')).toHaveText('0 of 3 complete', { timeout: 20000 })
+        await expect(welcome.getByRole('alert').first()).toContainText('Authorization canceled')
         expect((await page.evaluate(() => window.fluxy.certificateStatus())).trusted).toBe(false)
-        const certificate = await readFile(join(directory, 'certificates/certs/ca.pem'), 'utf8')
-        await expect(welcome.getByRole('alert')).toBeVisible()
+        await expect(access(join(directory, 'certificates/certs/ca.pem'))).rejects.toThrow()
+        await expect(welcome.getByRole('alert').first()).toBeVisible()
         await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
         await page.evaluate(async (port) => {
             const s = await window.fluxy.snapshot()
             await window.fluxy.settings({ ...s.settings, port, captureMode: 'proxy' })
         }, port)
         await welcome.getByRole('button', { name: 'Enable', exact: true }).click()
-        await expect(welcome.getByRole('alert')).toBeVisible()
+        await expect(
+            welcome.getByRole('alert').filter({ hasText: /EADDRINUSE|address already in use/ })
+        ).toBeVisible()
         expect((await page.evaluate(() => window.fluxy.snapshot())).systemProxy).toBe(false)
+        const certificate = await readFile(join(directory, 'certificates/certs/ca.pem'), 'utf8')
         await welcome.getByRole('button', { name: 'Use Manual Setup' }).click()
         await mkdir('test-results', { recursive: true })
         await page.screenshot({ path: 'test-results/fluxy-welcome-light.png' })
@@ -145,7 +149,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
         })
         welcome = page.getByRole('dialog', { name: 'Welcome to Fluxy' })
         await expect(welcome).toBeVisible()
-        await expect(welcome.getByRole('status')).toHaveText('0 of 2 complete')
+        await expect(welcome.getByRole('status')).toHaveText('0 of 3 complete')
         expect(await readFile(join(directory, 'certificates/certs/ca.pem'), 'utf8')).toBe(
             certificate
         )

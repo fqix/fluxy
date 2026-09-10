@@ -57,6 +57,7 @@ export type MenuCommand =
     | 'add-breakpoint'
     | 'certificate-key'
     | 'certificate-p12'
+    | 'uninstall-certificate'
     | 'reset-certificates'
     | 'reset-helper'
     | 'uninstall-helper'

@@ -703,6 +703,9 @@ export function App() {
                 setP12Password('')
                 setTool('Export P12')
                 break
+            case 'uninstall-certificate':
+                void run(() => window.fluxy.uninstallCertificate())
+                break
             case 'reset-certificates':
                 void run(() => window.fluxy.resetCertificates())
                 break

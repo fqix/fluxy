@@ -391,6 +391,12 @@ export function buildMenuTemplate(
             label: 'Certificate',
             submenu: [
                 item('Install Certificate on This Mac…', 'Certificates'),
+                item(
+                    'Uninstall Certificate…',
+                    'uninstall-certificate',
+                    undefined,
+                    available && mac && !state.transportBusy
+                ),
                 separator,
                 item('Add Custom Certificates…', 'Custom Certificates'),
                 separator,

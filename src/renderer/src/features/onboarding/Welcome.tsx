@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Check, Network, Wrench } from 'lucide-react'
+import { Check, Network, ShieldCheck, Wrench } from 'lucide-react'
 import {
     requiredCaptureDomainsSchema,
     type CertificateStatus,
@@ -63,9 +63,13 @@ export function Welcome({
         ref.current?.focus()
         return () => previous?.focus()
     }, [])
-    const setupReady = helperReady && !!certificate?.trusted && !certificate?.browserError
+    const certificateReady =
+        !!certificate?.trusted && !certificate?.browserError && !certificate?.error
+    const setupReady = helperReady && certificateReady
     const completed =
-        Number(setupReady) + Number(isTun ? snapshot.tun.state === 'running' : snapshot.running)
+        Number(helperReady) +
+        Number(certificateReady) +
+        Number(isTun ? snapshot.tun.state === 'running' : snapshot.running)
     const dismiss = () => {
         if (!busy) close()
     }
@@ -97,31 +101,40 @@ export function Welcome({
     }
     const rows = [
         {
-            title: 'Helper & Certificate Setup',
-            detail: 'Set up Helper and the HTTPS certificate.',
+            title: 'Helper Setup',
+            detail: 'Install the privileged helper for TUN capture and system certificate management.',
             icon: Wrench,
-            done: setupReady,
-            error: certificate?.error || certificate?.browserError,
-            label: certificate?.error
-                ? 'Recheck Status'
-                : helperReady
-                  ? 'Complete Setup'
-                  : snapshot.helper.state === 'outdated'
-                    ? 'Update Setup'
-                    : 'Set Up',
+            done: helperReady,
+            error: snapshot.helper.error,
+            label: snapshot.helper.state === 'outdated' ? 'Update Helper' : 'Install Helper',
             disabled:
-                !certificate ||
                 tunActive ||
                 snapshot.running ||
                 ['unsupported', 'installing', 'uninstalling'].includes(snapshot.helper.state),
+            action: () => act('Installing Helper…', () => window.fluxy.installHelper())
+        },
+        {
+            title: 'CA Certificate',
+            detail: helperReady
+                ? 'Install and trust the Fluxy root CA to inspect HTTPS traffic. This requests separate system authorization.'
+                : 'Install Helper first, then install and trust the Fluxy root CA for HTTPS inspection.',
+            icon: ShieldCheck,
+            done: certificateReady,
+            error: certificate?.error || certificate?.browserError,
+            label: certificate?.error
+                ? 'Recheck Status'
+                : certificate?.trusted
+                  ? 'Retry Browser Trust'
+                  : 'Install CA',
+            disabled:
+                !certificate ||
+                (!certificate.error && !helperReady) ||
+                tunActive ||
+                snapshot.running,
             action: () =>
-                act('Setting up Helper and certificate…', async () => {
-                    if (certificate?.error) {
-                        setCertificate(await window.fluxy.certificateStatus())
-                        return
-                    }
+                act('Installing CA certificate…', async () => {
                     try {
-                        await window.fluxy.installHelper()
+                        if (!certificate?.error) await window.fluxy.trustCertificate()
                     } finally {
                         setCertificate(await window.fluxy.certificateStatus())
                     }
@@ -131,7 +144,7 @@ export function Welcome({
             capture: true,
             title: isTun ? 'TUN Capture' : 'Socks Proxy',
             detail: isTun
-                ? 'Capture selected domains across apps. Complete setup above to enable TUN on macOS or Windows.'
+                ? 'Capture selected domains across apps. Complete Helper and CA setup above, then enable TUN.'
                 : 'Connect your app to Fluxy’s local SOCKS5 endpoint to capture HTTP and HTTPS traffic. HTTPS inspection requires trusting the root certificate. Supports TCP; UDP relay is not available.',
             icon: Network,
             done:
@@ -204,14 +217,14 @@ export function Welcome({
                             <h1 id="welcome-title">Welcome to Fluxy</h1>
                             <p>
                                 {snapshot.settings.onboardingCompleted
-                                    ? 'Review the two setup steps before continuing.'
-                                    : 'Complete these two steps to prepare network debugging.'}
+                                    ? 'Review the three setup steps before continuing.'
+                                    : 'Complete these three steps to prepare network debugging.'}
                             </p>
                         </div>
                     </div>
                     <div className="welcome-progress">
-                        <progress aria-label="Setup progress" max={2} value={completed} />
-                        <span role="status">{busy || `${completed} of 2 complete`}</span>
+                        <progress aria-label="Setup progress" max={3} value={completed} />
+                        <span role="status">{busy || `${completed} of 3 complete`}</span>
                     </div>
                 </header>
                 <div className="welcome-content">
@@ -362,7 +375,7 @@ export function Welcome({
                             </li>
                         ))}
                     </ol>
-                    {error && (
+                    {error && !rows.some((row) => row.error === error) && (
                         <p className="welcome-error" role="alert">
                             {error}
                         </p>
@@ -408,7 +421,7 @@ export function Welcome({
                         <Button disabled={!!busy} onClick={dismiss}>
                             Close
                         </Button>
-                        {!manual && completed < 2 && (
+                        {!manual && completed < 3 && (
                             <Button disabled={!!busy} onClick={() => setManual(true)}>
                                 Use Manual Setup
                             </Button>
@@ -420,7 +433,7 @@ export function Welcome({
                         )}
                         <Button
                             className="primary"
-                            disabled={!!busy || (!manual && completed < 2)}
+                            disabled={!!busy || (!manual && completed < 3)}
                             onClick={() => finish(false)}
                         >
                             {manual ? 'Continue Manually' : 'Get Started'}

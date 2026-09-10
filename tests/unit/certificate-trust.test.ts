@@ -40,6 +40,36 @@ describe('certificate trust lifecycle', () => {
         await trust.sync()
         expect(update).toHaveBeenCalledWith(expect.any(X509Certificate), true)
     })
+    it('waits for delayed system trust without reinstalling or syncing browser stores', async () => {
+        const { trust, status, update, remove } = service()
+        status.mockResolvedValueOnce({ generated: true, trusted: false, supported: true })
+        vi.useFakeTimers()
+        try {
+            const pending = trust.waitForSystemTrust()
+            await vi.runAllTimersAsync()
+            await pending
+            expect(status).toHaveBeenCalledTimes(2)
+            expect(update).not.toHaveBeenCalled()
+            expect(remove).not.toHaveBeenCalled()
+        } finally {
+            vi.useRealTimers()
+        }
+    })
+    it('does not treat persistently untrusted certificates as successful installations', async () => {
+        const { trust, status } = service()
+        status.mockResolvedValue({ generated: true, trusted: false, supported: true })
+        vi.useFakeTimers()
+        try {
+            const result = expect(trust.waitForSystemTrust()).rejects.toThrow(
+                'still reports it as untrusted'
+            )
+            await vi.runAllTimersAsync()
+            await result
+            expect(status).toHaveBeenCalledTimes(10)
+        } finally {
+            vi.useRealTimers()
+        }
+    })
     it('revokes the exact system CA then browser trust, persists opt-out, and resumes only after explicit setup', async () => {
         const { trust, remove, update } = service()
         await trust.remove()
@@ -63,6 +93,41 @@ describe('certificate trust lifecycle', () => {
         expect(update).not.toHaveBeenCalled()
         await trust.remove()
         expect(update).toHaveBeenCalledWith(expect.any(X509Certificate), false)
+    })
+    it('combines system certificate removal with helper uninstall before browser cleanup', async () => {
+        const { trust, remove, update } = service()
+        const order: string[] = []
+        const uninstall = vi.fn(async (_der?: Buffer) => {
+            order.push('uninstall')
+        })
+        update.mockImplementation(async () => {
+            order.push('browser')
+        })
+        await trust.removeAndUninstall(uninstall)
+        expect(uninstall).toHaveBeenCalledExactlyOnceWith(new X509Certificate(pem).raw)
+        expect(remove).not.toHaveBeenCalled()
+        expect(order).toEqual(['uninstall', 'browser'])
+    })
+    it('skips browser cleanup when combined uninstall fails and allows retry', async () => {
+        const { trust, remove, update } = service()
+        const uninstall = vi
+            .fn()
+            .mockRejectedValueOnce(new Error('canceled'))
+            .mockResolvedValue(undefined)
+        await expect(trust.removeAndUninstall(uninstall)).rejects.toThrow('canceled')
+        expect(update).not.toHaveBeenCalled()
+        expect(remove).not.toHaveBeenCalled()
+        await trust.removeAndUninstall(uninstall)
+        expect(update).toHaveBeenCalledOnce()
+    })
+    it('uninstalls the helper once when no root CA was generated', async () => {
+        const { trust, remove, update } = service()
+        await rm(join(directory, 'certificates/certs/ca.pem'))
+        const uninstall = vi.fn(async (_der?: Buffer) => {})
+        await trust.removeAndUninstall(uninstall)
+        expect(uninstall).toHaveBeenCalledExactlyOnceWith()
+        expect(remove).not.toHaveBeenCalled()
+        expect(update).not.toHaveBeenCalled()
     })
     it('exposes browser setup failure until a successful retry', async () => {
         const { trust, update } = service()

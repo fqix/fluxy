@@ -6,6 +6,7 @@ const api: FluxyAPI = {
     platform: process.platform,
     importCustomCertificate: (input) => invoke('certificate:custom-import', input),
     deleteCustomCertificate: (id) => invoke('certificate:custom-delete', id),
+    uninstallCertificate: () => invoke('certificate:uninstall'),
     resetCertificates: () => invoke('certificate:reset'),
     resetHelper: () => invoke('helper:reset'),
     protobufTypes: () => invoke('protobuf:types'),

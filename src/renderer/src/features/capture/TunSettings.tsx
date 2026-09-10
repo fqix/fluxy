@@ -208,9 +208,9 @@ export function HelperPanel({
             </p>
             {!compact && (
                 <p className="muted">
-                    Complete setup to install Helper Tool and trust Fluxy's root CA in the same
-                    elevated operation on macOS. Normal TUN starts reuse the installed helper
-                    without another authorization. The helper stops TUN when Fluxy disconnects.
+                    Install Helper Tool here and install the HTTPS root CA separately in Welcome.
+                    Normal TUN starts reuse the installed helper without another authorization. The
+                    helper stops TUN when Fluxy disconnects.
                 </p>
             )}
             {helper.error && (
@@ -225,10 +225,10 @@ export function HelperPanel({
                         onClick={() => act(() => window.fluxy.installHelper())}
                     >
                         {helper.state === 'outdated'
-                            ? 'Update Helper & CA'
+                            ? 'Update Helper'
                             : helper.state === 'error'
-                              ? 'Repair Helper & CA'
-                              : 'Set Up Helper & CA'}
+                              ? 'Repair Helper'
+                              : 'Install Helper'}
                     </Button>
                 )}
                 <Button

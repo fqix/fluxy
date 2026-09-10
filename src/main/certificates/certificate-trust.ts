@@ -28,6 +28,21 @@ export class CertificateTrust {
         return this.pending
     }
 
+    async waitForSystemTrust() {
+        // Authorization can finish before trustd exposes the updated trust settings.
+        // Poll evaluation only: never repeat the operation that presents authorization UI.
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const status = await this.status(join(this.directory, 'certificates'))
+            if (status.error) throw new Error(status.error)
+            if (status.trusted) return
+            if (!status.generated) throw new Error('Root certificate is missing after installation')
+            if (attempt < 9) await new Promise((resolve) => setTimeout(resolve, 500))
+        }
+        throw new Error(
+            'CA installation completed, but macOS or the system trust store still reports it as untrusted. Recheck Status before retrying installation.'
+        )
+    }
+
     async sync(explicitSetup = false) {
         if (!explicitSetup) {
             try {
@@ -53,7 +68,17 @@ export class CertificateTrust {
         }
     }
 
-    async remove() {
+    async removeAndUninstall(uninstall: (der?: Buffer) => Promise<void>) {
+        let uninstalled = false
+        await this.remove(async (der) => {
+            await uninstall(der)
+            uninstalled = true
+        })
+        // No generated CA: only the helper needs to be removed.
+        if (!uninstalled) await uninstall()
+    }
+
+    async remove(removeSystem = this.removeSystem) {
         // Persist before touching stores: even partial failures must not resurrect trust.
         await writePrivateFile(this.marker, 'disabled\n')
         let certificate: X509Certificate
@@ -72,7 +97,7 @@ export class CertificateTrust {
             }
             throw new Error('Restore the missing Fluxy root certificate before removing its trust.')
         }
-        await this.removeSystem(certificate.raw)
+        await removeSystem(certificate.raw)
         await this.browsers.update(certificate, false)
     }
 }
