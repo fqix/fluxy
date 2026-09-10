@@ -20,11 +20,11 @@
     "format:check": "prettier --check src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json scripts/*.mjs",
     "test:packaged": "FLUXY_TEST_EXECUTABLE=\"$PWD/dist/mac-arm64/Fluxy.app/Contents/MacOS/Fluxy\" playwright test",
     "sing-box:test": "node scripts/build-sing-box.mjs --test",
-    "core:build": "node scripts/build-electron-core.mjs && node scripts/build-electron-helper.mjs",
+    "core:build": "node scripts/build-sing-box.mjs && node scripts/build-electron-helper.mjs",
     "predev": "npm run core:build",
     "pretest": "npm run core:build",
-    "test:protocol": "node scripts/build-electron-core.mjs && tsx tests/protocol/verify.ts",
-    "test:protocol:public": "node scripts/build-electron-core.mjs && tsx tests/protocol/public.ts"
+    "test:protocol": "node scripts/build-sing-box.mjs && tsx tests/protocol/verify.ts",
+    "test:protocol:public": "node scripts/build-sing-box.mjs && tsx tests/protocol/public.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",

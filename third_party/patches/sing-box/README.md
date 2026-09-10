@@ -71,11 +71,19 @@ build/electron-core/sing-box version
 node scripts/build-sing-box.mjs --arch arm64 --arch x86_64
 ```
 
-[scripts/build-sing-box.mjs](../../../scripts/build-sing-box.mjs) exports the pinned
-commit into a unique temporary directory under `build/`, applies patches in
-filename order, builds, and removes that directory. Local submodule edits remain
-untouched. Compilation uses Go's own cache; no additional binary cache or lock is
-maintained. Tests run against patched `include`, `cmd/sing-box`, and the embedded inspector
+[scripts/build-sing-box.mjs](../../../scripts/build-sing-box.mjs) applies the patch
+series directly to `third_party/sing-box` and compiles that working directory.
+`npm run dev` runs this build through `predev`, so local source edits participate
+in subsequent builds. Temporary directories hold only build outputs and patch
+preflight copies; the patched source remains in the submodule.
+
+The script recognizes an already applied series, including overlapping patches,
+and records its checksums in the submodule's Git directory. Repeated builds keep
+local edits. A changed patch series requires reconciling the source and removing
+the receipt named in the error; conflicts stop before applying patches. The script
+never resets or cleans the source. Compilation uses Go's own cache.
+
+Tests run against patched `include`, `cmd/sing-box`, and the embedded inspector
 packages with the race detector (except Windows ARM64), followed by vet.
 `FLUXY_CORE_RACE=1 npm run test:protocol` also checks the live protocol engine with
 the race detector.
@@ -83,12 +91,15 @@ the race detector.
 Each build produces the executable, `.build.json` and `.licenses.txt`. The manifest
 records upstream tags, module versions, patch checksums and the binary checksum.
 Electron packages these under `core/`; macOS signing refreshes the signed checksum.
-Standalone output defaults to `build/sing-box` (`build/sing-box.exe` on Windows).
+Output defaults to `build/electron-core/sing-box` (`sing-box.exe` on Windows).
+`FLUXY_BUILD_PLATFORM`, `FLUXY_BUILD_ARCH`, and `FLUXY_CORE_RACE` provide build
+defaults; explicit CLI options take precedence. Use `--output` for another location.
 Go must be on PATH, or selected with `FLUXY_GO`.
 
 ## Updating patches
 
-Use a separate checkout at the pinned commit, apply the series, and edit there.
+Edit the patched submodule for development. Use a separate checkout at the pinned
+commit when regenerating the individual patches so local changes are not lost.
 Export a plain Git diff including added files into `NNNN-description.patch`.
 Rebase the patches when updating `pin.json`, then run Go and Electron tests.
 Never commit Fluxy changes into the upstream submodule pointer.

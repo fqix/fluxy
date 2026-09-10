@@ -12,9 +12,10 @@ import {
     rmSync,
     writeFileSync
 } from 'node:fs'
-import { basename, dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { applySingBoxPatches } from './apply-sing-box-patches.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SOURCE = join(ROOT, 'third_party/sing-box')
@@ -99,17 +100,21 @@ function main() {
         options: {
             platform: {
                 type: 'string',
-                default: process.platform === 'win32' ? 'windows' : process.platform
+                default: process.env.FLUXY_BUILD_PLATFORM || process.platform
             },
             arch: { type: 'string', multiple: true },
             output: { type: 'string' },
             test: { type: 'boolean', default: false },
-            race: { type: 'boolean', default: false }
+            race: { type: 'boolean', default: process.env.FLUXY_CORE_RACE === '1' }
         }
     })
-    const target = values.platform
+    const target = values.platform === 'win32' ? 'windows' : values.platform
     const arches = [
-        ...new Set(values.arch ?? [process.arch === 'x64' ? 'x86_64' : process.arch])
+        ...new Set(
+            (values.arch ?? [process.env.FLUXY_BUILD_ARCH || process.arch]).map((arch) =>
+                arch === 'x64' ? 'x86_64' : arch
+            )
+        )
     ].sort()
     if (
         !['darwin', 'linux', 'windows'].includes(target) ||
@@ -126,7 +131,8 @@ function main() {
     )
         throw new Error('Tests require the native host target')
     const destination = resolve(
-        values.output ?? join(ROOT, 'build/sing-box' + (target === 'windows' ? '.exe' : ''))
+        values.output ??
+            join(ROOT, 'build/electron-core/sing-box' + (target === 'windows' ? '.exe' : ''))
     )
     const revision = output('git', ['-C', SOURCE, 'rev-parse', 'HEAD'])
     if (revision !== PIN.revision)
@@ -137,8 +143,7 @@ function main() {
         .map((name) => ({ name, sha256: sha256(join(PATCHES, name)) }))
     mkdirSync(join(ROOT, 'build'), { recursive: true })
     const work = mkdtempSync(join(ROOT, 'build/sing-box-'))
-    const cwd = join(work, 'source')
-    mkdirSync(cwd)
+    const cwd = SOURCE
     const envFor = (arch) => ({
         ...process.env,
         GOTOOLCHAIN: PIN.toolchain,
@@ -150,19 +155,10 @@ function main() {
         CGO_ENABLED: values.race ? '1' : '0'
     })
     try {
-        // Export committed source so local submodule edits remain untouched.
-        const archive = execFileSync('git', ['-C', SOURCE, 'archive', PIN.revision], {
-            maxBuffer: 256 * 1024 * 1024
-        })
-        run('tar', ['-xf', '-', '-C', cwd], {
-            input: archive,
-            stdio: ['pipe', 'inherit', 'inherit']
-        })
-        for (const patch of patches)
-            run('git', ['apply', '--whitespace=nowarn', join(PATCHES, patch.name)], {
-                cwd,
-                env: { ...process.env, GIT_CEILING_DIRECTORIES: work }
-            })
+        applySingBoxPatches(
+            SOURCE,
+            patches.map((patch) => join(PATCHES, patch.name))
+        )
         const tags = readFileSync(join(cwd, 'release/DEFAULT_BUILD_TAGS_OTHERS'), 'utf8')
             .trim()
             .split(',')
