@@ -6,13 +6,17 @@ import { expect, it } from 'vitest'
 // @ts-expect-error The build scripts are dependency-free ESM.
 import { applySingBoxPatches } from '../../scripts/apply-sing-box-patches.mjs'
 
-function fixture(run: (source: string, patches: string[]) => void) {
+function fixture(run: (source: string, patches: string[]) => void, autocrlf = false) {
     const root = mkdtempSync(join(tmpdir(), 'fluxy-patch-test-'))
     const source = join(root, 'source')
     mkdirSync(source)
     const git = (...args: string[]) => execFileSync('git', args, { cwd: source })
     try {
         git('init', '-q')
+        // Temporary repositories do not inherit this project's attributes.
+        // Keep fixtures independent of the runner's global Git configuration.
+        git('config', 'core.autocrlf', String(autocrlf))
+        git('config', 'core.eol', 'lf')
         writeFileSync(join(source, 'code.txt'), 'original\n')
         git('add', 'code.txt')
         git(
@@ -51,6 +55,17 @@ it('applies overlapping patches once and preserves later source edits', () =>
         applySingBoxPatches(source, patches)
         expect(readFileSync(join(source, 'code.txt'), 'utf8')).toBe('local development\n')
     }))
+
+it('preserves CRLF checkout and local edits when Git autocrlf is enabled', () =>
+    fixture((source, patches) => {
+        applySingBoxPatches(source, patches)
+        expect(readFileSync(join(source, 'code.txt'), 'utf8')).toBe('second\r\n')
+        applySingBoxPatches(source, patches)
+        expect(readFileSync(join(source, 'code.txt'), 'utf8')).toBe('second\r\n')
+        writeFileSync(join(source, 'code.txt'), 'local development\r\n')
+        applySingBoxPatches(source, patches)
+        expect(readFileSync(join(source, 'code.txt'), 'utf8')).toBe('local development\r\n')
+    }, true))
 
 it('recognizes a manually applied overlapping series without a receipt', () =>
     fixture((source, patches) => {
