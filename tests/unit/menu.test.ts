@@ -25,6 +25,25 @@ function find(items: MenuItemConstructorOptions[], id: string) {
     return flatten(items).find((item) => item.id === id)!
 }
 describe('application menu', () => {
+    it.each(['darwin', 'win32', 'linux'] as const)(
+        'enables certificate removal on %s while preserving busy guards',
+        (platform) => {
+            expect(find(menu({}, platform), 'uninstall-certificate').enabled).toBe(true)
+            for (const state of [
+                { ready: false },
+                { busy: true },
+                { modal: true },
+                { transportBusy: true }
+            ]) {
+                expect(find(menu(state, platform), 'uninstall-certificate').enabled).toBe(false)
+            }
+            expect(find(menu({}, platform), 'Certificates').label).toBe(
+                platform === 'darwin'
+                    ? 'Install Certificate on This Mac…'
+                    : 'Install Certificate on This Computer…'
+            )
+        }
+    )
     it('gates traffic, selection, comparison and workspace actions', () => {
         const empty = menu()
         for (const id of [

@@ -390,12 +390,19 @@ export function buildMenuTemplate(
         {
             label: 'Certificate',
             submenu: [
-                item('Install Certificate on This Mac…', 'Certificates'),
+                item(
+                    mac
+                        ? 'Install Certificate on This Mac…'
+                        : 'Install Certificate on This Computer…',
+                    'Certificates'
+                ),
                 item(
                     'Uninstall Certificate…',
                     'uninstall-certificate',
                     undefined,
-                    available && mac && !state.transportBusy
+                    available &&
+                        ['darwin', 'win32', 'linux'].includes(platform) &&
+                        !state.transportBusy
                 ),
                 separator,
                 item('Add Custom Certificates…', 'Custom Certificates'),
