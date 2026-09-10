@@ -2,6 +2,7 @@ import { test, expect, _electron as electron } from '@playwright/test'
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { ensureCertificate } from '../../src/main/certificates/certificates'
 
 test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async () => {
     test.skip(
@@ -9,6 +10,7 @@ test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async ()
         'Scoped TUN requires macOS or Windows'
     )
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-coexistence-'))
+    await ensureCertificate(join(directory, 'certificates'))
     await writeFile(
         join(directory, 'preferences.json'),
         JSON.stringify({
@@ -54,6 +56,14 @@ test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async ()
                 options: unknown,
                 callback: Function
             ) => {
+                // Satisfy the TUN prerequisite without trusting the fixture CA on the host.
+                if (
+                    (file === '/usr/bin/security' && args[0] === 'verify-cert') ||
+                    (file.endsWith('fluxy-helper.exe') && args[0] === 'certificate-status')
+                ) {
+                    queueMicrotask(() => callback(null, 'true', ''))
+                    return {}
+                }
                 const stdout =
                     file.endsWith('fluxy-helper.exe') && args[0] === 'proxy-processes'
                         ? JSON.stringify('123 verge-mihomo.exe\n')
