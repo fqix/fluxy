@@ -149,15 +149,26 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             'Invalid CA'
         )
     })
-    it('runs desktop trust without elevation and permits retry after failure', async () => {
-        const authorize = vi.fn()
+    it('installs certificates without daemon RPC and permits retry after authorization failure', async () => {
+        const authorize = vi.fn(async (_command: string) => {})
+        const trustDesktop = vi.fn(async (_action: string, _der: Buffer): Promise<void> => {
+            throw new Error('authorization canceled')
+        })
+        let cancel!: (error: Error) => void
+        trustDesktop.mockImplementationOnce(
+            () =>
+                new Promise<void>((_resolve, reject) => {
+                    cancel = reject
+                })
+        )
         const helper = new HelperService(
             directory,
             testHelper,
             core,
             () => {},
             undefined,
-            authorize
+            authorize,
+            trustDesktop
         )
         helper.status = { state: 'ready' }
         const internals = helper as unknown as {
@@ -165,7 +176,7 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             assets(): Promise<unknown>
         }
         const operation = vi.spyOn(internals, 'operation').mockResolvedValue(undefined)
-        vi.spyOn(internals, 'assets').mockResolvedValue({})
+        vi.spyOn(internals, 'assets').mockResolvedValue({ helperSHA256: 'a'.repeat(64) })
         const ca = new X509Certificate(
             await readFile(await ensureCertificate(join(directory, 'desktop-ca')))
         ).raw
@@ -176,42 +187,34 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             await expect(helper.repair()).rejects.toThrow('Wait for certificate trust')
             await expect(helper.uninstall()).rejects.toThrow('Wait for the current')
             await expect(helper.removeCertificate(ca)).rejects.toThrow('Wait for certificate trust')
-            // The real test adapter refuses mutation before invoking native UI.
-            await expect(first).rejects.toThrow('CA mutations are disabled')
-            await expect(helper.installCertificate(ca)).rejects.toThrow('CA mutations are disabled')
-            expect(operation).toHaveBeenCalledTimes(2)
-            expect(operation).toHaveBeenCalledWith('ca.add', ca.toString('base64'), 30000)
+            const rejected = expect(first).rejects.toThrow('authorization canceled')
+            cancel(new Error('authorization canceled'))
+            await rejected
+            await expect(helper.installCertificate(ca)).rejects.toThrow('authorization canceled')
+            expect(operation).not.toHaveBeenCalled()
+            // The user trust domain never elevates, so no authorization shell runs.
             expect(authorize).not.toHaveBeenCalled()
+            expect(trustDesktop).toHaveBeenCalledTimes(2)
+            expect(trustDesktop.mock.calls[0][0]).toBe('trust-ca-desktop')
             expect(helper.status.state).toBe('ready')
         } finally {
             helper.close()
         }
     })
-    it('revokes desktop trust before daemon deletion and stops on cancellation', async () => {
+    it('removes certificates independently and stops on authorization cancellation', async () => {
         const helper = new HelperService(directory, testHelper, core, () => {})
         const internals = helper as unknown as {
-            desktopCertificate(der: Buffer, command: string): Promise<void>
-            operation(
-                method: string,
-                params: unknown,
-                timeout: number,
-                current: boolean
-            ): Promise<void>
+            desktopCertificate(action: string, der: Buffer): Promise<void>
+            operation(): Promise<void>
         }
-        const order: string[] = []
-        const desktop = vi.spyOn(internals, 'desktopCertificate').mockImplementation(async () => {
-            order.push('desktop')
-        })
-        const operation = vi.spyOn(internals, 'operation').mockImplementation(async () => {
-            order.push('daemon')
-        })
+        const authorize = vi.spyOn(internals, 'desktopCertificate').mockResolvedValue(undefined)
+        const operation = vi.spyOn(internals, 'operation')
         const der = Buffer.from('fixture')
         try {
-            desktop.mockRejectedValueOnce(new Error('authorization canceled'))
+            authorize.mockRejectedValueOnce(new Error('authorization canceled'))
             await expect(helper.removeCertificate(der)).rejects.toThrow('authorization canceled')
-            expect(operation).not.toHaveBeenCalled()
             let release!: () => void
-            desktop.mockImplementationOnce(
+            authorize.mockImplementationOnce(
                 () =>
                     new Promise<void>((resolve) => {
                         release = resolve
@@ -227,16 +230,9 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             await expect(helper.uninstall()).rejects.toThrow('Wait for the current')
             release()
             await pending
-            order.length = 0
             await helper.removeCertificate(der)
-            expect(order).toEqual(['desktop', 'daemon'])
-            expect(desktop).toHaveBeenLastCalledWith(der, 'untrust-ca-desktop')
-            expect(operation).toHaveBeenLastCalledWith(
-                'ca.remove',
-                der.toString('base64'),
-                90000,
-                false
-            )
+            expect(authorize).toHaveBeenLastCalledWith('untrust-ca-desktop', der)
+            expect(operation).not.toHaveBeenCalled()
         } finally {
             helper.close()
         }
@@ -253,11 +249,11 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         )
         const internals = helper as unknown as {
             assets(): Promise<unknown>
-            desktopCertificate(): Promise<void>
+            authorizeCertificate(): Promise<void>
             operation(): Promise<void>
         }
         vi.spyOn(internals, 'assets').mockResolvedValue({ helperSHA256: 'a'.repeat(64) })
-        const desktop = vi.spyOn(internals, 'desktopCertificate')
+        const desktop = vi.spyOn(internals, 'authorizeCertificate')
         const rpc = vi.spyOn(internals, 'operation')
         try {
             const first = helper.uninstall()
@@ -272,15 +268,17 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             helper.close()
         }
     })
-    it('removes certificates without an installed helper or daemon RPC', async () => {
+    it('removes certificates without an installed helper, elevation or daemon RPC', async () => {
         const authorize = vi.fn(async (_command: string) => {})
+        const trustDesktop = vi.fn(async (_action: string, _der: Buffer) => {})
         const helper = new HelperService(
             directory,
             testHelper,
             core,
             () => {},
             undefined,
-            authorize
+            authorize,
+            trustDesktop
         )
         const internals = helper as unknown as {
             assets(): Promise<unknown>
@@ -288,8 +286,13 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         }
         vi.spyOn(internals, 'assets').mockResolvedValue({ helperSHA256: 'a'.repeat(64) })
         const rpc = vi.spyOn(internals, 'operation')
+        const der = Buffer.from('public CA fixture')
         try {
-            await helper.removeCertificate(Buffer.from('public CA fixture'), true)
+            await helper.removeCertificate(der)
+            expect(trustDesktop).toHaveBeenCalledExactlyOnceWith('untrust-ca-desktop', der)
+            expect(authorize).not.toHaveBeenCalled()
+            // Admin-domain trust from older releases still needs the elevated path.
+            await helper.removeLegacyCertificate(der)
             expect(authorize).toHaveBeenCalledOnce()
             expect(authorize.mock.calls[0][0]).toContain('remove-ca-privileged')
             expect(authorize.mock.calls[0][0]).not.toContain('launchctl')
@@ -298,6 +301,53 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             helper.close()
         }
     })
+    it.each(['missing', 'outdated', 'error'] as const)(
+        'handles certificates with %s service and no core or pairing',
+        async (state) => {
+            const root = await mkdtemp(join(directory, 'standalone-ca-'))
+            const binary = join(root, 'fluxy-helper')
+            await writeFile(
+                binary,
+                '#!/bin/sh\ncase "$1" in trust-ca-desktop|untrust-ca-desktop) ;; *) exit 19 ;; esac\ncat >/dev/null\n',
+                { mode: 0o700 }
+            )
+            await writeFile(
+                binary + '.json',
+                JSON.stringify({
+                    version: 1,
+                    buildID: 'b'.repeat(64),
+                    helperSHA256: createHash('sha256')
+                        .update(await readFile(binary))
+                        .digest('hex'),
+                    coreSHA256: 'c'.repeat(64)
+                })
+            )
+            const authorize = vi.fn(async (_command: string) => {})
+            const helper = new HelperService(
+                root,
+                binary,
+                join(root, 'missing-core'),
+                () => {},
+                join(root, 'missing.sock'),
+                authorize
+            )
+            helper.status = { state }
+            try {
+                await helper.installCertificate(Buffer.from('public CA'))
+                await helper.removeCertificate(Buffer.from('public CA'))
+                // The bundled helper runs unelevated in the desktop session.
+                expect(authorize).not.toHaveBeenCalled()
+                expect(helper.status.state).toBe(state)
+                await writeFile(binary, 'tampered')
+                await expect(helper.installCertificate(Buffer.from('public CA'))).rejects.toThrow(
+                    'integrity check failed'
+                )
+                expect(authorize).not.toHaveBeenCalled()
+            } finally {
+                helper.close()
+            }
+        }
+    )
     async function server() {
         const root = await mkdtemp(join(directory, 'daemon-'))
         const token = randomBytes(32).toString('hex')
@@ -336,56 +386,6 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             .toBe(true)
         return { root, token, port, worker, closed }
     }
-    it('returns the real core startup error through RPC and allows a clean retry', async () => {
-        const { root, token, port, worker, closed } = await server()
-        const rpc = new HelperRPC(join(root, 'helper.sock'), token)
-        const occupied = net.createServer().listen(port, '127.0.0.1')
-        await once(occupied, 'listening')
-        try {
-            const p = {
-                ...params(),
-                bridgePort: await unusedPort(),
-                egressPort: await unusedPort()
-            }
-            // Configuration checking succeeds, but the real core fails when binding.
-            await rpc.request('tun.start', p).catch((error) => {
-                expect(String(error)).toContain('address already in use')
-            })
-            await expect.poll(async () => (await rpc.request('status')).tunRunning).toBe(false)
-            const reply = await rpc.request('status')
-            expect(reply.tunError).toContain('exit status 1')
-            expect(reply.tunError).toContain('address already in use')
-            expect(reply.tunError).not.toContain(p.password)
-            await new Promise<void>((resolve) => occupied.close(() => resolve()))
-            await rpc.request('tun.start', p)
-            await expect
-                .poll(async () => {
-                    try {
-                        ;(await connect(port)).destroy()
-                        return true
-                    } catch {
-                        return false
-                    }
-                })
-                .toBe(true)
-            expect((await rpc.request('status')).tunError).toBe('')
-            await rpc.request('tun.stop')
-            expect((await rpc.request('status')).tunError).toBe('')
-        } finally {
-            occupied.close()
-            rpc.close()
-            worker.kill('SIGTERM')
-            await closed
-        }
-    })
-    it('authenticates requests, denies arbitrary operations, and stops the real core on disconnect', async () => {
-        const serverState = await server()
-        const { root, token, port, worker, closed } = serverState
-        const bad = new HelperRPC(join(root, 'helper.sock'), randomBytes(32).toString('hex'))
-        const rpc = new HelperRPC(join(root, 'helper.sock'), token)
-        try {
-            await expect(bad.request('status')).rejects.toThrow('closed')
-            await expect(rpc.request('execute', { command: 'id' })).rejects.toThrow(
     it('captures HTTP and HTTPS in the helper-owned core without a second sing-box process', async () => {
         const { root, token, port, worker, closed } = await server()
         const manifest = {
@@ -537,6 +537,56 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             await closed
         }
     }, 30000)
+    it('returns the real core startup error through RPC and allows a clean retry', async () => {
+        const { root, token, port, worker, closed } = await server()
+        const rpc = new HelperRPC(join(root, 'helper.sock'), token)
+        const occupied = net.createServer().listen(port, '127.0.0.1')
+        await once(occupied, 'listening')
+        try {
+            const p = {
+                ...params(),
+                bridgePort: await unusedPort(),
+                egressPort: await unusedPort()
+            }
+            // Configuration checking succeeds, but the real core fails when binding.
+            await rpc.request('tun.start', p).catch((error) => {
+                expect(String(error)).toContain('address already in use')
+            })
+            await expect.poll(async () => (await rpc.request('status')).tunRunning).toBe(false)
+            const reply = await rpc.request('status')
+            expect(reply.tunError).toContain('exit status 1')
+            expect(reply.tunError).toContain('address already in use')
+            expect(reply.tunError).not.toContain(p.password)
+            await new Promise<void>((resolve) => occupied.close(() => resolve()))
+            await rpc.request('tun.start', p)
+            await expect
+                .poll(async () => {
+                    try {
+                        ;(await connect(port)).destroy()
+                        return true
+                    } catch {
+                        return false
+                    }
+                })
+                .toBe(true)
+            expect((await rpc.request('status')).tunError).toBe('')
+            await rpc.request('tun.stop')
+            expect((await rpc.request('status')).tunError).toBe('')
+        } finally {
+            occupied.close()
+            rpc.close()
+            worker.kill('SIGTERM')
+            await closed
+        }
+    })
+    it('authenticates requests, denies arbitrary operations, and stops the real core on disconnect', async () => {
+        const serverState = await server()
+        const { root, token, port, worker, closed } = serverState
+        const bad = new HelperRPC(join(root, 'helper.sock'), randomBytes(32).toString('hex'))
+        const rpc = new HelperRPC(join(root, 'helper.sock'), token)
+        try {
+            await expect(bad.request('status')).rejects.toThrow('closed')
+            await expect(rpc.request('execute', { command: 'id' })).rejects.toThrow(
                 'unsupported helper method'
             )
             await expect(rpc.request('tun.start', { ...params(), config: {} })).rejects.toThrow(
@@ -681,11 +731,11 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             await Promise.all([helper.install(), helper.install()])
             expect(helper.status.state).toBe('ready')
             expect(authorizations).toBe(1)
-            // The fixture daemon rejects mutations; do not invoke real desktop authorization.
+            // Simulate a rejected desktop trust request without touching system trust.
             vi.spyOn(
                 helper as unknown as { desktopCertificate(): Promise<void> },
                 'desktopCertificate'
-            ).mockResolvedValue(undefined)
+            ).mockRejectedValue(new Error('CA mutations are disabled'))
             for (let i = 0; i < 2; i++) {
                 await helper.startTun({
                     ...params(),

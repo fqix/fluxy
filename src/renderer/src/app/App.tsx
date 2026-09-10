@@ -192,6 +192,7 @@ export function App() {
     const [snapshot, setSnapshot] = useState<Snapshot>()
     const [error, setError] = useState('')
     const [toast, setToast] = useState('')
+    const [certificateActivity, setCertificateActivity] = useState('')
     const [busy, setBusy] = useState(0)
     const [workspaces, setWorkspaces] = useState<Workspace[]>(legacyWorkspaces)
     const [active, setActive] = useState(workspaces[0].id)
@@ -704,7 +705,20 @@ export function App() {
                 setTool('Export P12')
                 break
             case 'uninstall-certificate':
-                void run(() => window.fluxy.uninstallCertificate())
+                void run(async () => {
+                    setCertificateActivity(
+                        'Removing certificate… Check for an authorization dialog.'
+                    )
+                    try {
+                        setToast(
+                            (await window.fluxy.uninstallCertificate())
+                                ? 'Certificate trust removed. You can reinstall it from Certificates.'
+                                : 'Certificate removal canceled.'
+                        )
+                    } finally {
+                        setCertificateActivity('')
+                    }
+                })
                 break
             case 'reset-certificates':
                 void run(() => window.fluxy.resetCertificates())
@@ -2345,9 +2359,9 @@ export function App() {
                     </Button>
                 </div>
             )}
-            {toast && (
+            {(certificateActivity || toast) && (
                 <div className="notification toast" role="status">
-                    ✓ {toast}
+                    {certificateActivity || `✓ ${toast}`}
                 </div>
             )}
         </div>

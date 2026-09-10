@@ -512,7 +512,7 @@ exec /bin/zsh -i
         })
         if (answer.response !== 1) return false
         await capture.stop()
-        await certificateTrust.remove((der) => helper.removeCertificate(der, true))
+        await certificateTrust.remove()
         emit({ type: 'state' })
         return true
     })
@@ -873,9 +873,7 @@ exec /bin/zsh -i
         if (!existing.trusted) await helper.installCertificate(der)
         await certificateTrust.waitForSystemTrust()
         await certificateTrust.sync(true)
-        engine.log(
-            'Root CA installed and trusted through Helper Tool. Restart clients before capturing HTTPS.'
-        )
+        engine.log('Root CA installed and trusted. Restart clients before capturing HTTPS.')
         return true
     })
     handle('systemProxy', async (enabled) => {
@@ -969,9 +967,14 @@ else {
                 () => emit({ type: 'state' })
             )
             await helper.refresh()
-            certificateTrust = new CertificateTrust(store.directory, (der) =>
-                helper.removeCertificate(der)
-            )
+            certificateTrust = new CertificateTrust(store.directory, async (der) => {
+                await helper.removeCertificate(der)
+                // Machines set up before the user trust domain still carry an
+                // admin-domain record that only the elevated helper can clear.
+                if (process.platform !== 'darwin') return
+                if ((await certificateStatus(join(store.directory, 'certificates'))).trusted)
+                    await helper.removeLegacyCertificate(der)
+            })
             if (process.platform === 'linux' && !customCertificates.rootIdentity())
                 await certificateTrust
                     .exclusive(() => certificateTrust.sync())

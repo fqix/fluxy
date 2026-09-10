@@ -28,9 +28,9 @@ test('first-run setup reads real status, handles cancellation and persists expli
         await expect(welcome.getByRole('status')).toHaveText('0 of 3 complete')
         await expect(welcome.getByRole('listitem')).toHaveCount(3)
         await expect(welcome.getByRole('listitem').first()).toContainText('Helper Setup')
-        await expect(
-            welcome.getByRole('button', { name: 'Install CA', exact: true })
-        ).toBeDisabled()
+        const installCA = welcome.getByRole('button', { name: 'Install CA', exact: true })
+        if (process.platform === 'darwin') await expect(installCA).toBeEnabled()
+        else await expect(installCA).toBeDisabled()
         await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
         const captureDomains = welcome.getByRole('textbox', {
             name: 'Capture domains',
@@ -101,6 +101,7 @@ test('first-run setup reads real status, handles cancellation and persists expli
             const original = cp.spawn
             cp.spawn = ((file: string, ...args: unknown[]) =>
                 (args[0] as string[] | undefined)?.[0] === 'authorize-desktop' ||
+                (args[0] as string[] | undefined)?.[0] === 'trust-ca-desktop' ||
                 file === '/usr/bin/pkexec' ||
                 (args[0] as string[] | undefined)?.[0] === 'setup-native'
                     ? original(
@@ -117,6 +118,20 @@ test('first-run setup reads real status, handles cancellation and persists expli
         await expect(access(join(directory, 'certificates/certs/ca.pem'))).rejects.toThrow()
         await expect(welcome.getByRole('alert').first()).toBeVisible()
         await expect(welcome.getByRole('button', { name: 'Enable', exact: true })).toBeDisabled()
+        if (process.platform === 'darwin') {
+            await welcome.getByRole('button', { name: 'Install CA', exact: true }).click()
+            await expect(welcome.getByRole('alert').first()).toContainText('Authorization canceled')
+            expect((await page.evaluate(() => window.fluxy.helperStatus())).state).not.toBe('ready')
+            await expect
+                .poll(
+                    async () =>
+                        (await page.evaluate(() => window.fluxy.certificateStatus())).generated
+                )
+                .toBe(true)
+            await expect(
+                welcome.getByRole('button', { name: 'Install CA', exact: true })
+            ).toBeEnabled()
+        }
         await page.evaluate(async (port) => {
             const s = await window.fluxy.snapshot()
             await window.fluxy.settings({ ...s.settings, port, captureMode: 'proxy' })

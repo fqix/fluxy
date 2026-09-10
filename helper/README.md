@@ -60,12 +60,12 @@ On macOS, a validated `splitDNS` TUN profile captures only a dedicated Fake IP p
 
 Welcome presents Helper installation and CA installation as separate steps.
 `helper:install` only installs or updates the helper; it does not create or trust a
-certificate. After the helper is ready, `certificate:trust` generates or reuses the
-local CA, inserts its public certificate via the helper, and requests certificate
-trust from the logged-in desktop session. Existing trusted CAs are reused, and CA
-cancellation leaves the installed helper available for a separate retry. TUN capture
-is enabled only after both steps are ready. The native combined-install capability
-remains available internally but is not used by the Welcome workflow.
+certificate. On macOS, `certificate:trust` generates or reuses the local CA and
+installs it into the user trust domain, which needs no elevation and no helper at
+all: the Helper service may be missing, stopped, outdated, or unavailable, and
+pairing and the sing-box binary are not required. Existing trusted CAs are reused,
+and CA cancellation can be retried independently of Helper setup. TUN capture is
+enabled only after both steps are ready, because TUN itself needs the helper.
 
 Tests verify sequencing, public-certificate transport, failure propagation and privilege guards without mutating system trust. They do not prove the number of native authorization dialogs. A clean first-install acceptance run on the target macOS must verify both the resulting certificate trust and the actual dialog count.
 
@@ -79,22 +79,45 @@ The desktop backend also uses the bundled native executable, launched as the cur
 
 The crash watchdog receives the bundled executable's absolute path from the main process, so it can restore proxy settings in Electron's Node mode without accessing Electron's app API. Native ABI/input tests and simulated ownership tests run by default. The real Windows system-proxy test is opt-in: set `FLUXY_TEST_NATIVE_PROXY=1` and run `npx playwright test tests/e2e/windows-native-proxy.spec.ts --workers 1`. It temporarily changes the current user's proxy, captures an HTTP request using system configuration, verifies normal Stop restoration, terminates the actual Electron main PID, and verifies watchdog restoration.
 
-### macOS certificate removal
+### macOS certificate installation and removal
 
-Electron runs `untrust-ca-desktop` as the logged-in desktop user to remove the
-certificate's admin trust settings through Security.framework. Only after that
-succeeds does the paired daemon handle `ca.remove` to delete the matching System
-keychain certificate. Cancellation or an unavailable desktop session stops deletion.
-Expired self-signed Fluxy roots remain removable. The desktop command is disabled
-in rootless test helpers; tests simulate authorization and do not alter system trust.
+Installation and removal run the verified bundled native executable in the
+logged-in desktop session, unelevated and without daemon RPC: `trust-ca-desktop`
+adds the CA to the login keychain and writes `kSecTrustSettingsDomainUser` trust
+settings, and `untrust-ca-desktop` removes both, matching the keychain's own item
+by exact DER because a certificate rebuilt from DER is not a keychain item.
+A canceled or failed trust dialog deletes the copy the same run inserted, so
+cancelling leaves nothing behind. macOS presents exactly one dialog, from
+Security.framework, asking for the session owner's own password.
+Trust therefore covers the logged-in user — Safari, Chrome, `curl`, Node — but not
+other accounts or system daemons.
+
+This replaces the earlier admin-domain flow, which could not reach one dialog.
+`com.apple.trust-settings.admin` is satisfied by `entitled` (Apple-private) or
+`authenticate-admin`, and `authenticate-admin` carries `allow-root false` with
+`timeout 0`: root does not satisfy it and its credential cannot be cached or
+pre-authorized. That is why the two earlier attempts failed — preauthorizing both
+rights still produced two dialogs, and desktop-side admin trust returned OSStatus
+-61 because the System keychain needs root. `com.apple.trust-settings.user` is
+`entitled-session-owner-or-authenticate-session-owner` instead, so the session
+owner grants it directly. System authorization rules and SIP settings remain
+unchanged.
+
+`trust-ca-privileged` and `remove-ca-privileged` remain for the admin domain.
+Machines set up before this change still carry an admin-domain record that only
+root can clear, so certificate removal runs the unelevated removal first and falls
+back to the elevated uninstaller only while the CA still verifies as trusted.
+Expired self-signed Fluxy roots remain removable. Rootless test helpers disable
+certificate mutations; tests simulate authorization without altering system trust.
 
 The macOS **Helper uninstall** action stops capture and removes only the helper service.
 Certificates and system/browser trust are preserved. **Certificate → Uninstall Certificate…**
-removes CA trust separately, even after Helper has been uninstalled. Its elevated shell
-copies the bundled helper into a root-owned temporary directory and checks its
-SHA-256, then invokes `remove-ca-privileged` with the public Fluxy CA. This retains
-the desktop authorization session instead of asking the launchd daemon to prompt.
-Browser trust cleanup follows successful system removal. Saved traffic, custom CA
-trust and the local CA identity remain unchanged.
+removes CA trust separately, even after Helper has been uninstalled. It runs the
+integrity-checked bundled helper's `untrust-ca-desktop` in the desktop session. Only
+when the CA still verifies as trusted afterwards — an admin-domain record from a
+release before the user trust domain — does it fall back to an elevated shell that
+copies the bundled helper into a root-owned temporary directory, checks its SHA-256
+and invokes `remove-ca-privileged`. Browser trust cleanup follows successful system
+removal. Saved traffic, custom CA trust and the local CA identity remain unchanged.
 Tests verify one application authorization request and failure ordering; actual
 macOS authorization dialog counts require a native interactive acceptance run.

@@ -120,7 +120,12 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                     return Reflect.apply(originalDialog, _electron.dialog, args)
                 }) as typeof _electron.dialog.showMessageBox
                 cp.spawn = ((file: string, ...args: unknown[]) => {
-                    if ((args[0] as string[] | undefined)?.[0] !== 'authorize-desktop')
+                    const action = (args[0] as string[] | undefined)?.[0]
+                    if (
+                        !['authorize-desktop', 'trust-ca-desktop', 'untrust-ca-desktop'].includes(
+                            action ?? ''
+                        )
+                    )
                         return Reflect.apply(originalSpawn, cp, [file, ...args])
                     state.helperAuthCount++
                     const { PassThrough } = process.getBuiltinModule('node:stream')!
@@ -135,7 +140,36 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                         input += chunk.toString()
                     })
                     worker.stdin.on('finish', () => {
-                        const request = JSON.parse(input) as { command: string }
+                        if (action === 'trust-ca-desktop') {
+                            worker.stderr.write(
+                                'CA mutations are disabled in the rootless test helper'
+                            )
+                            setTimeout(() => worker.emit('close', 1), 10)
+                            return
+                        }
+                        if (action === 'untrust-ca-desktop') {
+                            const { X509Certificate } = process.getBuiltinModule('node:crypto')!
+                            const expected = new X509Certificate(
+                                fs.readFileSync(paths.data + '/certificates/certs/ca.pem')
+                            ).raw
+                            const matches = expected.equals(
+                                Buffer.from(JSON.parse(input), 'base64')
+                            )
+                            if (matches) state.caRemovalCount++
+                            else worker.stderr.write('CA removal requested the wrong identity')
+                            setTimeout(() => worker.emit('close', matches ? 0 : 1), 10)
+                            return
+                        }
+                        const request = JSON.parse(input) as {
+                            command: string
+                        }
+                        if (request.command.includes('trust-ca-privileged')) {
+                            worker.stderr.write(
+                                'CA mutations are disabled in the rootless test helper'
+                            )
+                            setTimeout(() => worker.emit('close', 1), 10)
+                            return
+                        }
                         if (request.command.includes('remove-ca-privileged')) {
                             state.caRemovalCount++
                             setTimeout(() => worker.emit('close', 0), 10)
@@ -208,7 +242,7 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
             await app.evaluate(
                 () => (process as typeof process & { helperAuthCount: number }).helperAuthCount
             )
-        ).toBe(1)
+        ).toBe(4)
         await page.screenshot({ path: 'test-results/fluxy-helper-welcome.png' })
         await app.close()
         app = await launch()

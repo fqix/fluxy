@@ -5,20 +5,29 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { certificateRemovalScript, uninstallationScript } from '../../src/main/system/helper'
+import { certificateScript, uninstallationScript } from '../../src/main/system/helper'
 
-it.skipIf(process.platform === 'win32').each(['success', 'removal failure', 'checksum mismatch'])(
-    'removes certificates independently with a verified bundled program: %s',
-    async (outcome) => {
+it
+    .skipIf(process.platform === 'win32')
+    .each(
+        (['install', 'remove'] as const).flatMap((action) =>
+            ['success', 'removal failure', 'checksum mismatch'].map((outcome) => ({
+                action,
+                outcome
+            }))
+        )
+    )(
+    'runs $action independently with a verified bundled program: $outcome',
+    async ({ action, outcome }) => {
         const directory = await mkdtemp(join(tmpdir(), 'fluxy-uninstall-test-'))
         try {
             const binary = join(directory, 'helper')
             const received = join(directory, 'certificate.json')
             const finished = join(directory, 'uninstalled')
-            const source = `#!/bin/sh\n[ "$1" = remove-ca-privileged ] || exit 19\ncat > '${received}'\nexit ${outcome === 'removal failure' ? 23 : 0}\n`
+            const source = `#!/bin/sh\n[ "$1" = ${action === 'install' ? 'trust-ca-privileged' : 'remove-ca-privileged'} ] || exit 19\ncat > '${received}'\nexit ${outcome === 'removal failure' ? 23 : 0}\n`
             await writeFile(binary, source, { mode: 0o700 })
             const der = Buffer.from('public certificate fixture')
-            const script = certificateRemovalScript({
+            const script = certificateScript(action, {
                 certificate: der,
                 helperPath: binary,
                 helperSHA256:
@@ -30,7 +39,7 @@ it.skipIf(process.platform === 'win32').each(['success', 'removal failure', 'che
             expect(script).not.toContain('/Library/PrivilegedHelperTools')
             // Use isolated fixtures; no system stores are touched.
             const prefix = script.replace(
-                '/private/tmp/fluxy-uninstall.XXXXXX',
+                '/private/tmp/fluxy-certificate.XXXXXX',
                 join(directory, 'staged.XXXXXX')
             )
             const run = promisify(execFile)('/bin/sh', [

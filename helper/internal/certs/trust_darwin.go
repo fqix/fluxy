@@ -28,14 +28,6 @@ static int fluxy_remove_admin_trust(const void *bytes, long size) {
  CFRelease(cert); CFRelease(data);
  return status;
 }
-static int fluxy_remove_desktop_trust(const void *bytes, long size) {
- SecuritySessionId session;
- SessionAttributeBits attributes;
- OSStatus status = SessionGetInfo(callerSecuritySession, &session, &attributes);
- if (status) return status;
- if (!(attributes & sessionHasGraphicAccess)) return errAuthorizationInteractionNotAllowed;
- return fluxy_remove_admin_trust(bytes, size);
-}
 static int fluxy_cert_installed(const void *bytes, long size) {
  SecKeychainRef keychain = NULL; CFTypeRef result = NULL;
  OSStatus status = SecKeychainOpen("/Library/Keychains/System.keychain", &keychain);
@@ -138,34 +130,6 @@ func commandError(operation string, output []byte, err error) error {
 		detail = detail[:4096]
 	}
 	return fmt.Errorf("security %s: %w: %s", operation, err, detail)
-}
-
-// RemoveTrustDesktop owns any authorization UI; the daemon only performs cleanup afterwards.
-func RemoveTrustDesktop(cert *x509.Certificate) error {
-	if protocol.Testing {
-		return errors.New("CA mutations are disabled in the rootless test helper")
-	}
-	if os.Geteuid() == 0 {
-		return errors.New("certificate trust removal must run in the desktop user session, not as root")
-	}
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	data := C.CBytes(cert.Raw)
-	defer C.free(data)
-	return removalAuthorizationError(int(C.fluxy_remove_desktop_trust(data, C.long(len(cert.Raw)))))
-}
-
-func removalAuthorizationError(status int) error {
-	switch status {
-	case 0:
-		return nil
-	case -60006, -128:
-		return errors.New("Certificate trust removal canceled; the certificate was not deleted")
-	case -60007:
-		return errors.New("Certificate trust removal requires an interactive macOS desktop session. Open Fluxy in your logged-in desktop and retry")
-	default:
-		return fmt.Errorf("macOS certificate trust removal failed: OSStatus %d; the certificate was not deleted", status)
-	}
 }
 
 // RemovePrivileged runs only inside the desktop-authorized uninstaller, not launchd.

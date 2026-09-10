@@ -115,9 +115,10 @@ export function Welcome({
         },
         {
             title: 'CA Certificate',
-            detail: helperReady
-                ? 'Install and trust the Fluxy root CA to inspect HTTPS traffic. This requests separate system authorization.'
-                : 'Install Helper first, then install and trust the Fluxy root CA for HTTPS inspection.',
+            detail:
+                window.fluxy.platform === 'darwin' || helperReady
+                    ? 'Install and trust the Fluxy root CA to inspect HTTPS traffic. macOS asks for your password once; the Helper is not required.'
+                    : 'Install Helper first, then install and trust the Fluxy root CA for HTTPS inspection.',
             icon: ShieldCheck,
             done: certificateReady,
             error: certificate?.error || certificate?.browserError,
@@ -128,7 +129,7 @@ export function Welcome({
                   : 'Install CA',
             disabled:
                 !certificate ||
-                (!certificate.error && !helperReady) ||
+                (!certificate.error && window.fluxy.platform !== 'darwin' && !helperReady) ||
                 tunActive ||
                 snapshot.running,
             action: () =>

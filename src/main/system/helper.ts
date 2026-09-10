@@ -173,15 +173,16 @@ trap '/bin/rm -rf "$root"' EXIT
 /bin/launchctl bootstrap system ${shellQuote(plist)}
 /bin/launchctl kickstart system/${helperID}`
 }
-export function authorizeInstallation(
-    command: string,
+// Runs the bundled helper as the logged-in desktop user. The helper itself owns
+// whatever macOS dialog the requested operation needs.
+function runBundledHelper(
     helperPath: string,
-    certificate?: Buffer
+    args: string[],
+    input: string,
+    failure: string
 ): Promise<void> {
-    if (process.platform === 'win32') return authorizeWindowsSetup(helperPath, command)
-    if (process.platform !== 'darwin') return authorizePortable(command)
     return new Promise<void>((resolve, reject) => {
-        const worker = spawn(helperPath, ['authorize-desktop'], {
+        const worker = spawn(helperPath, args, {
             stdio: ['pipe', 'pipe', 'pipe'],
             timeout: 180000
         })
@@ -194,29 +195,63 @@ export function authorizeInstallation(
         })
         worker.once('error', reject)
         worker.once('close', (code) =>
-            code === 0
-                ? resolve()
-                : reject(new Error(output.trim() || 'Native helper setup canceled or failed'))
+            code === 0 ? resolve() : reject(new Error(output.trim() || failure))
         )
         worker.stdin.on('error', () => {})
-        worker.stdin.end(JSON.stringify({ command, certificate: certificate?.toString('base64') }))
+        worker.stdin.end(input)
     })
 }
-export function certificateRemovalScript(removal: {
+export function authorizeInstallation(
+    command: string,
+    helperPath: string,
+    certificate?: Buffer
+): Promise<void> {
+    if (process.platform === 'win32') return authorizeWindowsSetup(helperPath, command)
+    if (process.platform !== 'darwin') return authorizePortable(command)
+    return runBundledHelper(
+        helperPath,
+        ['authorize-desktop'],
+        JSON.stringify({ command, certificate: certificate?.toString('base64') }),
+        'Native helper setup canceled or failed'
+    )
+}
+// macOS root CA trust in the user domain. com.apple.trust-settings.user is granted
+// by the session owner, so this needs no elevation and presents exactly one dialog.
+// The admin domain would also need root for the System keychain, and its
+// authenticate-admin rule (allow-root false, timeout 0) adds a second, uncacheable
+// dialog that no pre-authorization can absorb.
+export function desktopCertificate(
+    action: 'trust-ca-desktop' | 'untrust-ca-desktop',
+    helperPath: string,
     certificate: Buffer
-    helperPath: string
-    helperSHA256: string
-}) {
+): Promise<void> {
+    return runBundledHelper(
+        helperPath,
+        [action],
+        JSON.stringify(certificate.toString('base64')),
+        action === 'trust-ca-desktop'
+            ? 'Certificate installation canceled or failed'
+            : 'Certificate removal canceled or failed'
+    )
+}
+export function certificateScript(
+    action: 'install' | 'remove',
+    removal: {
+        certificate: Buffer
+        helperPath: string
+        helperSHA256: string
+    }
+) {
     if (!/^[a-f0-9]{64}$/.test(removal.helperSHA256)) throw new Error('Invalid helper checksum')
     // Copy the verified bundled helper to root-owned storage before executing it.
-    // This works even when the installed helper predates the removal CLI.
+    // Certificate operations never connect to or start the installed service.
     return `set -eu
-cleanup=$(/usr/bin/mktemp -d /private/tmp/fluxy-uninstall.XXXXXX)
+cleanup=$(/usr/bin/mktemp -d /private/tmp/fluxy-certificate.XXXXXX)
 trap '/bin/rm -rf "$cleanup"' EXIT
 /bin/cp ${shellQuote(removal.helperPath)} "$cleanup/fluxy-helper"
 [ "$(/usr/bin/shasum -a 256 "$cleanup/fluxy-helper" | /usr/bin/awk '{print $1}')" = ${shellQuote(removal.helperSHA256)} ] || { echo 'Helper checksum mismatch' >&2; exit 1; }
 /bin/chmod 700 "$cleanup/fluxy-helper"
-"$cleanup/fluxy-helper" remove-ca-privileged <<'FLUXY_PUBLIC_CA'
+"$cleanup/fluxy-helper" ${action === 'install' ? 'trust-ca-privileged' : 'remove-ca-privileged'} <<'FLUXY_PUBLIC_CA'
 "${removal.certificate.toString('base64')}"
 FLUXY_PUBLIC_CA
 `
@@ -274,7 +309,6 @@ export class HelperService {
     private heartbeat?: NodeJS.Timeout
     private manifest?: Manifest
     private closing = false
-    private trustWorker?: ReturnType<typeof execFile>
     private trusting?: Promise<void>
     private revoking = false
     onTunFailure?: (error: Error) => void
@@ -286,22 +320,26 @@ export class HelperService {
         private changed: () => void,
         private socketPath = helperSocket,
         private authorize = (command: string, certificate?: Buffer) =>
-            authorizeInstallation(command, this.helperPath, certificate)
+            authorizeInstallation(command, this.helperPath, certificate),
+        private trustDesktop = (
+            action: 'trust-ca-desktop' | 'untrust-ca-desktop',
+            certificate: Buffer
+        ) => desktopCertificate(action, this.helperPath, certificate)
     ) {}
     private setStatus(status: HelperStatus) {
         this.status = status
         this.changed()
     }
-    private async assets() {
+    private async assets(requireCore = true) {
         const manifest = JSON.parse(await readFile(this.helperPath + '.json', 'utf8')) as Manifest
         if (
             manifest.version !== 1 ||
             !/^[a-f0-9]{64}$/.test(manifest.buildID) ||
             digest(await readFile(this.helperPath)) !== manifest.helperSHA256 ||
-            digest(await readFile(this.corePath)) !== manifest.coreSHA256
+            (requireCore && digest(await readFile(this.corePath)) !== manifest.coreSHA256)
         )
             throw new Error('Helper bundle integrity check failed; rebuild Fluxy')
-        this.manifest = manifest
+        if (requireCore) this.manifest = manifest
         return manifest
     }
     private async client() {
@@ -574,24 +612,16 @@ export class HelperService {
             this.operations--
         }
     }
-    async removeCertificate(der: Buffer, standalone = false) {
+    async removeCertificate(der: Buffer) {
         if (this.installing) throw new Error('Wait for Helper Tool installation to finish')
         if (this.trusting) throw new Error('Wait for certificate trust to finish')
         if (this.uninstalling) throw new Error('Helper Tool is being uninstalled')
         this.revoking = true
         this.trusting = (async () => {
-            if (standalone && process.platform === 'darwin') {
-                const script = certificateRemovalScript({
-                    certificate: der,
-                    helperPath: this.helperPath,
-                    helperSHA256: (await this.assets()).helperSHA256
-                })
-                await this.authorize(`/bin/sh -c ${shellQuote(script)}`)
+            if (process.platform === 'darwin') {
+                await this.desktopCertificate('untrust-ca-desktop', der)
                 return
             }
-            if (process.platform === 'darwin')
-                await this.desktopCertificate(der, 'untrust-ca-desktop')
-            // A paired older helper can delete the certificate once desktop trust is gone.
             await this.operation('ca.remove', der.toString('base64'), 90000, false)
         })().finally(() => {
             this.trusting = undefined
@@ -599,29 +629,37 @@ export class HelperService {
         })
         return this.trusting
     }
-    private async desktopCertificate(
-        der: Buffer,
-        command: 'trust-ca-desktop' | 'untrust-ca-desktop'
-    ) {
-        await this.assets()
-        if (this.closing) throw new Error('Fluxy is closing')
-        await new Promise<void>((resolve, reject) => {
-            this.trustWorker = execFile(
-                this.helperPath,
-                [command],
-                {
-                    timeout: 180000,
-                    maxBuffer: 16384
-                },
-                (error, _stdout, stderr) => {
-                    this.trustWorker = undefined
-                    if (error) reject(new Error(stderr.trim() || error.message))
-                    else resolve()
-                }
-            )
-            this.trustWorker.stdin!.on('error', () => {})
-            this.trustWorker.stdin!.end(JSON.stringify(der.toString('base64')))
+    // Releases before the user trust domain installed the CA system-wide; only root
+    // can clear that record, so it keeps the elevated path for existing machines.
+    async removeLegacyCertificate(der: Buffer) {
+        if (process.platform !== 'darwin') return
+        if (this.installing) throw new Error('Wait for Helper Tool installation to finish')
+        if (this.trusting) throw new Error('Wait for certificate trust to finish')
+        if (this.uninstalling) throw new Error('Helper Tool is being uninstalled')
+        this.revoking = true
+        this.trusting = this.authorizeCertificate(der, 'remove').finally(() => {
+            this.trusting = undefined
+            this.revoking = false
         })
+        return this.trusting
+    }
+    private async authorizeCertificate(der: Buffer, action: 'install' | 'remove') {
+        const manifest = await this.assets(false)
+        if (this.closing) throw new Error('Fluxy is closing')
+        const script = certificateScript(action, {
+            certificate: der,
+            helperPath: this.helperPath,
+            helperSHA256: manifest.helperSHA256
+        })
+        await this.authorize(`/bin/sh -c ${shellQuote(script)}`)
+    }
+    private async desktopCertificate(
+        action: 'trust-ca-desktop' | 'untrust-ca-desktop',
+        der: Buffer
+    ) {
+        await this.assets(false)
+        if (this.closing) throw new Error('Fluxy is closing')
+        await this.trustDesktop(action, der)
     }
     installCertificate(der: Buffer): Promise<void> {
         if (this.revoking)
@@ -632,10 +670,8 @@ export class HelperService {
                 await this.operation('ca.install', der.toString('base64'), 90000)
                 return
             }
-            await this.operation('ca.add', der.toString('base64'), 30000)
-            // Run the bundled native adapter as the desktop user, never via
-            // osascript/sudo or launchd. Security.framework owns the trust prompt.
-            await this.desktopCertificate(der, 'trust-ca-desktop')
+            // One macOS dialog, no elevation, and no Helper installation required.
+            await this.desktopCertificate('trust-ca-desktop', der)
         })().finally(() => {
             this.trusting = undefined
         })
@@ -716,7 +752,6 @@ export class HelperService {
     }
     close() {
         this.closing = true
-        this.trustWorker?.kill()
         clearInterval(this.heartbeat)
         this.rpc?.close()
         return this.uninstalling?.catch(() => {})

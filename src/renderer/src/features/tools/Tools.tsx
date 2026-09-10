@@ -4,7 +4,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { HeaderTable } from '@/components/data/HeaderTable'
 import type { Run } from '@/types/actions'
 import { setupInstructions } from '@shared/app/setup'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
     Plus,
     Trash2,
@@ -24,6 +24,7 @@ import {
     type Snapshot,
     type Transaction,
     type ComposeRequest,
+    type CertificateStatus,
     pretty
 } from '@shared/contracts/model'
 
@@ -651,25 +652,83 @@ export function Preferences({
     )
 }
 export function Certificates({ snapshot, run }: { snapshot: Snapshot; run: Run }) {
+    const [certificate, setCertificate] = useState<CertificateStatus>()
+    const [busy, setBusy] = useState('')
+    const [message, setMessage] = useState('')
+    const [error, setError] = useState('')
+    const pending = useRef(false)
+    const errorMessage = (error: unknown) =>
+        String(error).replace(/^Error: (?:Error invoking remote method '[^']+': Error: )?/, '')
+    useEffect(() => {
+        let active = true
+        void window.fluxy.certificateStatus().then(
+            (status) => active && setCertificate(status),
+            (error) => active && setError(errorMessage(error))
+        )
+        return () => {
+            active = false
+        }
+    }, [])
+    const act = async (
+        label: string,
+        action: () => Promise<unknown>,
+        success: string,
+        canceled = ''
+    ) => {
+        if (pending.current) return
+        pending.current = true
+        setBusy(label)
+        setMessage('')
+        setError('')
+        await run(async () => {
+            try {
+                const result = await action()
+                setMessage(result === false ? canceled : success)
+            } catch (error) {
+                setError(errorMessage(error))
+            } finally {
+                try {
+                    setCertificate(await window.fluxy.certificateStatus())
+                } catch (error) {
+                    setError(errorMessage(error))
+                }
+                pending.current = false
+                setBusy('')
+            }
+        })
+    }
+    const statusError = error || certificate?.error || certificate?.browserError
     return (
-        <div className="certificate-panel">
+        <div className="certificate-panel" aria-busy={!!busy}>
             <ShieldCheck size={48} className="blue" />
             <h2>Fluxy Electron Root CA</h2>
             <p>
                 Install and trust this certificate to inspect HTTPS traffic.
                 <br />
-                Fluxy keeps the same certificate across restarts. Helper Tool handles System
-                keychain trust after a single installation authorization.
+                Fluxy keeps the same certificate across restarts.
+                {window.fluxy.platform === 'darwin'
+                    ? ' macOS asks for authorization when trust needs to change. The Helper service is not required.'
+                    : ' Install Helper Tool first to manage system certificate trust.'}
             </p>
             <HeaderTable
                 values={{
                     Certificate: snapshot.certificatePath,
+                    Status: !certificate
+                        ? 'Checking…'
+                        : certificate.error
+                          ? 'Unable to check trust'
+                          : certificate.trusted
+                            ? 'Trusted'
+                            : certificate.generated
+                              ? 'Not trusted'
+                              : 'Not installed',
                     Scope: 'Independent from the Swift Fluxy certificate',
                     Usage: 'Local development and traffic inspection'
                 }}
             />
             <div className="button-row">
                 <Button
+                    disabled={!!busy}
                     onClick={() =>
                         void run(
                             () => window.fluxy.exportCertificate(),
@@ -682,12 +741,40 @@ export function Certificates({ snapshot, run }: { snapshot: Snapshot; run: Run }
                 </Button>
                 <Button
                     className="primary"
-                    onClick={() => void run(() => window.fluxy.trustCertificate())}
+                    disabled={!!busy || !certificate?.supported}
+                    onClick={() =>
+                        void act(
+                            'Installing certificate… Check for an authorization dialog.',
+                            () => window.fluxy.trustCertificate(),
+                            'Certificate installed and trusted.'
+                        )
+                    }
                 >
                     <ShieldCheck size={14} />
-                    Install & Trust on macOS
+                    Install & Trust
+                </Button>
+                <Button
+                    disabled={!!busy || !certificate?.supported}
+                    onClick={() =>
+                        void act(
+                            'Removing certificate… Check for an authorization dialog.',
+                            () => window.fluxy.uninstallCertificate(),
+                            'Certificate trust removed. You can reinstall it at any time.',
+                            'Certificate removal canceled.'
+                        )
+                    }
+                >
+                    Uninstall Certificate
+                </Button>
+                <Button
+                    disabled={!!busy}
+                    onClick={() => void act('Checking certificate…', async () => {}, '')}
+                >
+                    Recheck Status
                 </Button>
             </div>
+            {(busy || message) && <p role="status">{busy || message}</p>}
+            {statusError && <p role="alert">{statusError}</p>}
             <p className="muted">
                 For iOS: export the certificate, install its profile, then enable full trust under
                 Settings → General → About → Certificate Trust Settings.
