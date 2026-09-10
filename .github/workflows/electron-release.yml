@@ -50,7 +50,7 @@ jobs:
           go-version: '1.27.1'
           cache-dependency-path: |
             third_party/sing-box/go.sum
-            tools/helper/go.sum
+            helper/go.sum
       - name: Validate native build architecture
         run: node -e 'if(process.platform !== process.env.FLUXY_BUILD_PLATFORM || process.arch !== process.env.FLUXY_BUILD_ARCH) throw Error("Runner architecture differs from release target")'
       - name: Validate release version

@@ -21,11 +21,11 @@ execFileSync(
         '-buildvcs=false',
         '-ldflags=-s -w',
         '-o',
-        '../../' + output,
+        '../' + output,
         '.'
     ],
     {
-        cwd: 'tools/helper',
+        cwd: 'helper',
         stdio: 'inherit',
         env: {
             ...process.env,

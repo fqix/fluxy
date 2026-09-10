@@ -8,7 +8,7 @@ on:
         'tests/**',
         'resources/**',
         'third_party/patches/sing-box/**',
-        'tools/helper/**',
+        'helper/**',
         'scripts/**',
         'install.sh',
         'install.ps1',
@@ -24,7 +24,7 @@ on:
         'tests/**',
         'resources/**',
         'third_party/patches/sing-box/**',
-        'tools/helper/**',
+        'helper/**',
         'scripts/**',
         'install.sh',
         'install.ps1',
@@ -52,7 +52,7 @@ jobs:
           go-version: '1.27.1'
           cache-dependency-path: |
             third_party/sing-box/go.sum
-            tools/helper/go.sum
+            helper/go.sum
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -64,9 +64,9 @@ jobs:
       - run: npx playwright install-deps chromium
         if: runner.os == 'Linux'
       - run: go test -race ./...
-        working-directory: tools/helper
+        working-directory: helper
       - run: go vet ./...
-        working-directory: tools/helper
+        working-directory: helper
       - run: npm test
       - run: npm run test:protocol
         env:

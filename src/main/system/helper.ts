@@ -201,9 +201,27 @@ export function authorizeInstallation(
         worker.stdin.end(JSON.stringify({ command, certificate: certificate?.toString('base64') }))
     })
 }
+export function certificateRemovalScript(removal: {
+    certificate: Buffer
+    helperPath: string
+    helperSHA256: string
+}) {
+    if (!/^[a-f0-9]{64}$/.test(removal.helperSHA256)) throw new Error('Invalid helper checksum')
+    // Copy the verified bundled helper to root-owned storage before executing it.
+    // This works even when the installed helper predates the removal CLI.
+    return `set -eu
+cleanup=$(/usr/bin/mktemp -d /private/tmp/fluxy-uninstall.XXXXXX)
+trap '/bin/rm -rf "$cleanup"' EXIT
+/bin/cp ${shellQuote(removal.helperPath)} "$cleanup/fluxy-helper"
+[ "$(/usr/bin/shasum -a 256 "$cleanup/fluxy-helper" | /usr/bin/awk '{print $1}')" = ${shellQuote(removal.helperSHA256)} ] || { echo 'Helper checksum mismatch' >&2; exit 1; }
+/bin/chmod 700 "$cleanup/fluxy-helper"
+"$cleanup/fluxy-helper" remove-ca-privileged <<'FLUXY_PUBLIC_CA'
+"${removal.certificate.toString('base64')}"
+FLUXY_PUBLIC_CA
+`
+}
 export function uninstallationScript() {
-    // Fixed Electron-only paths. Never remove certificates, user preferences,
-    // another Fluxy distribution's helper, or arbitrary caller-supplied paths.
+    // Only remove fixed Electron helper paths; certificate removal is independent.
     const base = `/Library/PrivilegedHelperTools/${helperID}`
     const plist = `/Library/LaunchDaemons/${helperID}.plist`
     const runtime = `/private/var/run/${helperID}`
@@ -211,12 +229,22 @@ export function uninstallationScript() {
 pid=''
 if /bin/launchctl print system/${helperID} >/dev/null 2>&1; then
     pid=$(/bin/launchctl print system/${helperID} | /usr/bin/awk '$1 == "pid" && $2 == "=" { print $3; exit }')
-    /bin/launchctl bootout system/${helperID}
+    if ! /bin/launchctl bootout system/${helperID}; then
+        if /bin/launchctl print system/${helperID} >/dev/null 2>&1; then
+            echo 'Could not unload Helper service; uninstall stopped' >&2
+            exit 1
+        fi
+    fi
 fi
-if /bin/launchctl print system/${helperID} >/dev/null 2>&1; then
-    echo 'Helper service is still loaded; uninstall stopped' >&2
-    exit 1
-fi
+attempts=0
+while /bin/launchctl print system/${helperID} >/dev/null 2>&1; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 30 ]; then
+        echo 'Helper service did not unload within 30 seconds; uninstall stopped' >&2
+        exit 1
+    fi
+    /bin/sleep 1
+done
 case "$pid" in
     ''|*[!0-9]*) ;;
     *)
@@ -247,6 +275,7 @@ export class HelperService {
     private closing = false
     private trustWorker?: ReturnType<typeof execFile>
     private trusting?: Promise<void>
+    private revoking = false
     onTunFailure?: (error: Error) => void
     private tunActive = false
     constructor(
@@ -354,7 +383,7 @@ export class HelperService {
         if (this.status.state === 'ready') return
         if (this.status.state === 'missing' || this.status.state === 'outdated')
             throw new Error(
-                'Helper Tool needs installation or update. Complete Helper & Certificate Setup before starting capture.'
+                'Helper Tool needs installation or update. Complete Helper Setup before starting capture.'
             )
         throw new Error(
             this.status.error || 'Helper unavailable; open Helper Tool to repair installation'
@@ -544,14 +573,58 @@ export class HelperService {
             this.operations--
         }
     }
-    async removeCertificate(der: Buffer) {
+    async removeCertificate(der: Buffer, standalone = false) {
         if (this.installing) throw new Error('Wait for Helper Tool installation to finish')
         if (this.trusting) throw new Error('Wait for certificate trust to finish')
-        // Revocation must also work with a paired older helper during an app upgrade.
-        // It does not execute new code or require the current bundled assets.
-        await this.operation('ca.remove', der.toString('base64'), 90000, false)
+        if (this.uninstalling) throw new Error('Helper Tool is being uninstalled')
+        this.revoking = true
+        this.trusting = (async () => {
+            if (standalone && process.platform === 'darwin') {
+                const script = certificateRemovalScript({
+                    certificate: der,
+                    helperPath: this.helperPath,
+                    helperSHA256: (await this.assets()).helperSHA256
+                })
+                await this.authorize(`/bin/sh -c ${shellQuote(script)}`)
+                return
+            }
+            if (process.platform === 'darwin')
+                await this.desktopCertificate(der, 'untrust-ca-desktop')
+            // A paired older helper can delete the certificate once desktop trust is gone.
+            await this.operation('ca.remove', der.toString('base64'), 90000, false)
+        })().finally(() => {
+            this.trusting = undefined
+            this.revoking = false
+        })
+        return this.trusting
+    }
+    private async desktopCertificate(
+        der: Buffer,
+        command: 'trust-ca-desktop' | 'untrust-ca-desktop'
+    ) {
+        await this.assets()
+        if (this.closing) throw new Error('Fluxy is closing')
+        await new Promise<void>((resolve, reject) => {
+            this.trustWorker = execFile(
+                this.helperPath,
+                [command],
+                {
+                    timeout: 180000,
+                    maxBuffer: 16384
+                },
+                (error, _stdout, stderr) => {
+                    this.trustWorker = undefined
+                    if (error) reject(new Error(stderr.trim() || error.message))
+                    else resolve()
+                }
+            )
+            this.trustWorker.stdin!.on('error', () => {})
+            this.trustWorker.stdin!.end(JSON.stringify(der.toString('base64')))
+        })
     }
     installCertificate(der: Buffer): Promise<void> {
+        if (this.revoking)
+            return Promise.reject(new Error('Wait for certificate trust removal to finish'))
         if (this.trusting) return this.trusting
         this.trusting = (async () => {
             if (process.platform !== 'darwin') {
@@ -561,25 +634,7 @@ export class HelperService {
             await this.operation('ca.add', der.toString('base64'), 30000)
             // Run the bundled native adapter as the desktop user, never via
             // osascript/sudo or launchd. Security.framework owns the trust prompt.
-            await this.assets()
-            if (this.closing) throw new Error('Fluxy is closing')
-            await new Promise<void>((resolve, reject) => {
-                this.trustWorker = execFile(
-                    this.helperPath,
-                    ['trust-ca-desktop'],
-                    {
-                        timeout: 180000,
-                        maxBuffer: 16384
-                    },
-                    (error, _stdout, stderr) => {
-                        this.trustWorker = undefined
-                        if (error) reject(new Error(stderr.trim() || error.message))
-                        else resolve()
-                    }
-                )
-                this.trustWorker.stdin!.on('error', () => {})
-                this.trustWorker.stdin!.end(JSON.stringify(der.toString('base64')))
-            })
+            await this.desktopCertificate(der, 'trust-ca-desktop')
         })().finally(() => {
             this.trusting = undefined
         })

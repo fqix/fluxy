@@ -10,7 +10,7 @@ import { join } from 'node:path'
 test('Electron reuses the helper, cancels removal safely, uninstalls and can install again', async () => {
     test.skip(
         process.platform !== 'darwin',
-        'macOS audit-token fixture; other platform peers are covered by tools/helper tests'
+        'macOS audit-token fixture; other platform peers are covered by helper tests'
     )
     test.setTimeout(90000)
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-helper-ui-'))
@@ -31,7 +31,7 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
     await promisify(execFile)(
         process.env.FLUXY_GO || 'go',
         ['build', '-tags=helper_testing', '-o', binary, '.'],
-        { cwd: 'tools/helper', env: { ...process.env, CGO_ENABLED: '1' } }
+        { cwd: 'helper', env: { ...process.env, CGO_ENABLED: '1' } }
     )
     await symlink(join(process.cwd(), 'build/electron-core/sing-box'), join(root, 'sing-box'))
     const launch = () =>
