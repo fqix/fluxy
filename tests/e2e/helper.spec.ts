@@ -100,12 +100,14 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                     uninstallAuthCanceled: boolean
                     simulateCARemoval: boolean
                     caRemovalCount: number
+                    certificateNotices: string[]
                 }
                 state.helperAuthCount = 0
                 state.uninstallConfirmed = false
                 state.uninstallAuthCanceled = false
                 state.simulateCARemoval = false
                 state.caRemovalCount = 0
+                state.certificateNotices = []
                 const originalDialog = _electron.dialog.showMessageBox
                 _electron.dialog.showMessageBox = (async (...args: unknown[]) => {
                     const options = args.at(-1) as { message?: string }
@@ -117,6 +119,10 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
                             response: state.uninstallConfirmed ? 1 : 0,
                             checkboxChecked: false
                         }
+                    if (options.message === 'Certificate uninstalled successfully.') {
+                        state.certificateNotices.push(options.message)
+                        return { response: 0, checkboxChecked: false }
+                    }
                     return Reflect.apply(originalDialog, _electron.dialog, args)
                 }) as typeof _electron.dialog.showMessageBox
                 cp.spawn = ((file: string, ...args: unknown[]) => {
@@ -339,6 +345,16 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         await access(join(data, 'browser-ca-disabled'))
         expect(await readFile(join(data, 'certificates/certs/ca.pem'), 'utf8')).toBe(ca)
 
+        await expect
+            .poll(() => app.evaluate(() => (process as any).certificateNotices))
+            .toEqual(['Certificate uninstalled successfully.'])
+        await expect
+            .poll(() =>
+                app.evaluate(
+                    ({ Menu }) => Menu.getApplicationMenu()!.getMenuItemById('Helper Tool')!.enabled
+                )
+            )
+            .toBe(true)
         await app.evaluate(({ Menu }) =>
             Menu.getApplicationMenu()!.getMenuItemById('Helper Tool')!.click()
         )
