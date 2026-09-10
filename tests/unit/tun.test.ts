@@ -19,7 +19,7 @@ import { TunService, unusedPort } from '../../src/main/tun/tun'
 import { tunSettingsSchema } from '../../src/shared/contracts/model'
 
 const execute = promisify(execFile)
-const core = join(process.cwd(), 'build/electron-core/fluxy-core')
+const core = join(process.cwd(), 'build/electron-core/sing-box')
 const curl = (port: number, url: string, extra: string[] = []) =>
     execute(
         '/usr/bin/curl',

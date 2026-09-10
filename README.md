@@ -30,7 +30,7 @@ irm https://raw.githubusercontent.com/fqix/fluxy/main/install.ps1 | iex
 
 Run the command in PowerShell as your desktop user. It downloads and silently installs Fluxy for the current user.
 
-Both scripts select the architecture and verify SHA-256. Matching packages and checksum files must be published first. See [installation options and release requirements](tools/install/README.md) for a specific version or a dry run, or inspect the scripts: [macOS / Linux](install.sh) · [Windows](install.ps1).
+Both scripts select the architecture and verify SHA-256. Matching packages and checksum files must be published first. Pass `--dry-run` to preview the resolved URLs, or `--version` to select a specific release. Inspect the scripts: [macOS / Linux](install.sh) · [Windows](install.ps1).
 
 ## Develop
 
@@ -40,7 +40,7 @@ npm ci
 npm run dev
 ```
 
-Use Node.js 22.12+ and npm. All builds need Python 3.10+ and Go for the transport core and helper; macOS also needs Xcode Command Line Tools. No Rockxy application, Xcode project or SwiftPM dependency tree is required. The packaged application includes these runtime components.
+Use Node.js 22.12+ and npm. All builds need Go for the transport core and helper; macOS also needs Xcode Command Line Tools. No Rockxy application, Xcode project or SwiftPM dependency tree is required. The packaged application includes these runtime components.
 
 ## Features
 
@@ -51,7 +51,7 @@ Use Node.js 22.12+ and npm. All builds need Python 3.10+ and Go for the transpor
 - Certificate tools, request composition, scripting, Protobuf/gRPC inspection and MCP.
 - Automatic update checks/downloads with an explicit restart/install action. Production updates require signed published packages.
 
-goproxy runs in a Go child process; Fluxy retains its rules, scripts, breakpoints and session model. Pinned dependencies, builds and stream regression coverage are documented in [tools/goproxy](tools/goproxy/README.md).
+sing-box runs transport and the embedded goproxy inspection engine in one Go child process; Fluxy retains its rules, scripts, breakpoints and session model. Source patches, pinned dependencies and builds are documented in [third_party/patches/sing-box](third_party/patches/sing-box/README.md).
 
 The AI assistant has been removed. See [feature coverage and limits](ELECTRON.md).
 
@@ -75,21 +75,20 @@ npm run package
 npm run dist
 ```
 
-Tests use local servers and temporary storage. Real system proxy changes, certificate trust, privileged helper installation and TUN routing require explicit application actions. Helper installation, TUN, certificate trust and packaging have platform implementations for macOS, Linux and Windows. Native Linux/Windows privilege and routing acceptance tests are still required; see [platform requirements](tools/helper/README.md).
+Tests use local servers and temporary storage. Real system proxy changes, certificate trust, privileged helper installation and TUN routing require explicit application actions. Helper installation, TUN, certificate trust and packaging have platform implementations for macOS, Linux and Windows. Native Linux/Windows privilege and routing acceptance tests are still required; see [platform requirements](helper/README.md).
 
 ## Layout
 
-| Path                                     | Purpose                                                                   |
-| ---------------------------------------- | ------------------------------------------------------------------------- |
-| `src/main`                               | [Main process modules](src/main/README.md): capture, TUN, system, storage |
-| `src/preload`                            | Validated renderer bridge                                                 |
-| `src/renderer`                           | React desktop UI                                                          |
-| `src/shared`                             | [Shared modules](src/shared/README.md): contracts, traffic, workspace     |
-| `tools/helper`                           | Cross-platform Go privilege helper                                        |
-| `tools/sing-box`, `third_party/sing-box` | Pinned transport core and build tooling                                   |
-| `tools/goproxy`   | Go HTTP proxy, private IPC and build tooling                        |
-| `tests`                                  | Unit, integration and Electron desktop tests                              |
-| `resources`                              | Fluxy icons and redistribution notices                                    |
+| Path                                                   | Purpose                                                                   |
+| ------------------------------------------------------ | ------------------------------------------------------------------------- |
+| `src/main`                                             | [Main process modules](src/main/README.md): capture, TUN, system, storage |
+| `src/preload`                                          | Validated renderer bridge                                                 |
+| `src/renderer`                                         | React desktop UI                                                          |
+| `src/shared`                                           | [Shared modules](src/shared/README.md): contracts, traffic, workspace     |
+| `helper`                                         | Cross-platform Go privilege helper                                        |
+| `third_party/patches/sing-box`, `third_party/sing-box` | Pinned transport core and build tooling                                   |
+| `tests`                                                | Unit, integration and Electron desktop tests                              |
+| `resources`                                            | Fluxy icons and redistribution notices                                    |
 
 ## License and attribution
 

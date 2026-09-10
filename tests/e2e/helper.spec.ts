@@ -33,7 +33,7 @@ test('Electron reuses the helper, cancels removal safely, uninstalls and can ins
         ['build', '-tags=helper_testing', '-o', binary, '.'],
         { cwd: 'tools/helper', env: { ...process.env, CGO_ENABLED: '1' } }
     )
-    await symlink(join(process.cwd(), 'build/electron-core/fluxy-core'), join(root, 'fluxy-core'))
+    await symlink(join(process.cwd(), 'build/electron-core/sing-box'), join(root, 'sing-box'))
     const launch = () =>
         electron.launch({
             args: process.env.FLUXY_TEST_EXECUTABLE ? [] : ['.'],

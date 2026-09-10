@@ -9,14 +9,14 @@ import {
 import { matchesBreakpoint } from '../rules/rule-match'
 import { ProcessResolver } from './process-resolver'
 import type { CustomCertificates } from '../certificates/custom-certificates'
-import { Proxy, type IContext } from './goproxy-transport'
-import { bundledCorePath, SingBoxProxy } from './sing-box-proxy'
+import { Proxy, type IContext } from './inspector-transport'
+import { bundledCorePath } from './sing-box-proxy'
 import http from 'node:http'
 import { isUtf8 } from 'node:buffer'
 import https from 'node:https'
 import net from 'node:net'
 import { Readable, type Duplex } from 'node:stream'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
 import { readFile, stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
@@ -214,7 +214,6 @@ export class ProxyEngine {
         this.transportEgress = url
     }
     private proxy?: Proxy
-    private ingress?: SingBoxProxy
     onFailure?: (error: Error) => Promise<void>
     private routeAgent: ReturnType<typeof upstreamAgent>
     private starting?: Promise<void>
@@ -435,7 +434,7 @@ export class ProxyEngine {
         })
         this.proxy = proxy
         proxy.onError((ctx, error, kind) => {
-            if (kind === 'GOPROXY_EXIT' && this.proxy === proxy)
+            if (kind === 'INSPECTOR_EXIT' && this.proxy === proxy)
                 this.failed(error ?? new Error(kind))
             const t = ctx && this.context.get(ctx)
             if (t) this.complete(t, error ?? new Error(kind))
@@ -612,7 +611,6 @@ export class ProxyEngine {
         })
         // Preflight gives a clear bind error before the dependency creates its internal servers.
         const host = this.store.settings.localhostOnly ? '127.0.0.1' : '0.0.0.0'
-        const ingressToken = this.transportEgress ? undefined : randomBytes(32).toString('hex')
         try {
             await new Promise<void>((resolve, reject) => {
                 const probe = net.createServer()
@@ -620,48 +618,36 @@ export class ProxyEngine {
                 probe.listen(this.store.settings.port, host, () => probe.close(() => resolve()))
             })
             await new Promise<void>((resolve, reject) => {
-                proxy.listen(
-                    {
-                        port: ingressToken ? 0 : this.store.settings.port,
-                        host: ingressToken ? '127.0.0.1' : host,
-                        ingressToken,
-                        ingressPort: this.store.settings.port,
-                        sslCaDir: join(this.store.directory, 'certificates'),
-                        keepAlive: true,
-                        httpsAgent: this.routeAgent,
-                        httpAgent: this.routeAgent,
-                        timeout: 120000
-                    },
-                    (error) => (error ? reject(error) : resolve())
-                )
+                void proxy
+                    .listen(
+                        {
+                            port: this.store.settings.port,
+                            host,
+                            corePath: this.corePath,
+                            directory: this.store.directory,
+                            sslCaDir: join(this.store.directory, 'certificates'),
+                            keepAlive: true,
+                            httpsAgent: this.routeAgent,
+                            httpAgent: this.routeAgent,
+                            timeout: 120000
+                        },
+                        (error) => (error ? reject(error) : resolve())
+                    )
+                    .catch(reject)
                 proxy.onError((_ctx, error, kind) => {
                     if (!this.running && kind === 'HTTP_SERVER_ERROR') reject(error)
                 })
             })
             proxy.httpServer?.on('connection', (socket) => this.track(socket))
-            if (ingressToken) {
-                const ingress = (this.ingress = new SingBoxProxy(this.corePath, (error) => {
-                    if (this.ingress === ingress) this.failed(error)
-                }))
-                await ingress.start(
-                    this.store.directory,
-                    host,
-                    this.store.settings.port,
-                    proxy.port,
-                    ingressToken
-                )
-            }
             this.running = true
             this.log(`Proxy listening on ${host}:${this.store.settings.port}`)
             this.log(
-                ingressToken
+                !this.transportEgress
                     ? `sing-box: HTTP/HTTPS and SOCKS5 share ${host}:${this.store.settings.port}`
                     : `TUN inspection: HTTP/CONNECT on ${host}:${this.store.settings.port}`
             )
             this.emit({ type: 'state' })
         } catch (error) {
-            await this.ingress?.stop()
-            this.ingress = undefined
             if (proxy.httpServer) await proxy.close()
             this.routeAgent.destroy()
             this.proxy = undefined
@@ -1198,9 +1184,6 @@ export class ProxyEngine {
     }
     private async close() {
         if (this.starting) await this.starting.catch(() => {})
-        const ingress = this.ingress
-        this.ingress = undefined
-        await ingress?.stop()
         for (const [id] of this.pending) this.resolveBreakpoint(id, 'abort')
         for (const socket of this.sockets) socket.destroy()
         this.sockets.clear()

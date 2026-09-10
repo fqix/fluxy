@@ -15,7 +15,7 @@ const appPath = resources ? join(resources, 'app.asar') : process.cwd()
 
 for (const phase of [
     `${executableName('fluxy-helper')}.json`,
-    `${executableName('fluxy-core')}.build.json`
+    `${executableName('sing-box')}.build.json`
 ]) {
     test(`quit during ${phase} initialization waits and cleans up partial services`, async ({}, testInfo) => {
         const directory = await mkdtemp(join(tmpdir(), 'fluxy-early-quit-'))

@@ -1,0 +1,35 @@
+{
+  "log": {
+    "output": "stderr"
+  },
+  "services": [
+    {
+      "type": "fluxy-inspector",
+      "tag": "inspector"
+    }
+  ],
+  "inbounds": [
+    {
+      "type": "fluxy-mixed",
+      "tag": "proxy",
+      "listen": "127.0.0.1",
+      "listen_port": 6060
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "fluxy-inspect",
+      "tag": "inspect",
+      "inspector": "inspector"
+    }
+  ],
+  "route": {
+    "final": "inspect",
+    "rules": [
+      {
+        "network": "udp",
+        "action": "reject"
+      }
+    ]
+  }
+}

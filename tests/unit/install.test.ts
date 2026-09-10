@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 // @ts-expect-error Release preparation is a dependency-free Node script.
-import { prepareRelease } from '../../tools/publish-electron-release.mjs'
+import { prepareRelease } from '../../scripts/publish-electron-release.mjs'
 import { GenericProvider } from 'electron-updater/out/providers/GenericProvider'
 import { getAppUpdatePublishConfiguration } from 'app-builder-lib/out/publish/PublishManager'
 import { createUpdateInfoTasks } from 'app-builder-lib/out/publish/updateInfoBuilder'

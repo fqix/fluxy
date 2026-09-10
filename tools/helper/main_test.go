@@ -170,7 +170,7 @@ func TestDisconnectStopsCore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filepath.Join(base, "fluxy-core"+exeSuffix()), data, 0700); err != nil {
+	if err = os.WriteFile(filepath.Join(base, "sing-box"+exeSuffix()), data, 0700); err != nil {
 		t.Fatal(err)
 	}
 	server, client := net.Pipe()

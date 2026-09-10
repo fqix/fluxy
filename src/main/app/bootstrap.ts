@@ -966,8 +966,8 @@ else {
                 (value) => safeStorage.decryptString(Buffer.from(value, 'base64'))
             )
             const corePath = app.isPackaged
-                ? join(process.resourcesPath, 'core', executableName('fluxy-core'))
-                : join(app.getAppPath(), 'build', 'electron-core', executableName('fluxy-core'))
+                ? join(process.resourcesPath, 'core', executableName('sing-box'))
+                : join(app.getAppPath(), 'build', 'electron-core', executableName('sing-box'))
             engine = new ProxyEngine(store, emit, undefined, corePath)
             engine.customCertificates = customCertificates
             helper = new HelperService(

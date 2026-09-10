@@ -101,7 +101,7 @@ describe.skipIf(process.platform !== 'darwin')('Fake IP DNS and capture integrat
         })
         const path = join(directory, 'config.json')
         await writeFile(path, JSON.stringify(config))
-        const core = join(process.cwd(), 'build/electron-core/fluxy-core')
+        const core = join(process.cwd(), 'build/electron-core/sing-box')
         const execute = promisify(execFile)
         await execute(core, ['check', '-c', path])
         engine.setTransportEgress(egress)

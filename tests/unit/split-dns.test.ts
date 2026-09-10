@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseProxyProcesses } from '../../src/main/tun/proxy-discovery'
+import { ownedProxyPids, parseProxyProcesses } from '../../src/main/tun/proxy-discovery'
 import { selectFakeIPRange, fakeIPv6Range } from '../../src/main/tun/split-dns'
 import { tunConfig } from '../../src/main/tun/tun-config'
 import {
@@ -51,14 +51,28 @@ describe('Fake IP TUN coexistence', () => {
             parseProxyProcesses(`
 123 /Applications/Clash Verge.app/Contents/MacOS/verge-mihomo
 124 /usr/local/bin/sing-box
-125 /Applications/Fluxy.app/Contents/Resources/core/fluxy-core
+125 /Applications/Fluxy.app/Contents/Resources/core/sing-box
 126 /tmp/sing-box/not-a-proxy
+127 /Library/PrivilegedHelperTools/dev.fengqi.fluxy.electron.helper/sing-box
+128 C:/ProgramData/FluxyHelper/sing-box.exe
+129 /Applications/Other.app/Contents/Resources/core/sing-box
 ${process.pid} /tmp/sing-box
 `)
         ).toEqual([
             { pid: 123, name: 'Mihomo' },
-            { pid: 124, name: 'sing-box' }
+            { pid: 124, name: 'sing-box' },
+            { pid: 129, name: 'sing-box' }
         ])
+    })
+    it('excludes owned ingress PIDs from Windows basename snapshots', () => {
+        ownedProxyPids.add(789)
+        try {
+            expect(parseProxyProcesses('789 sing-box.exe\n790 sing-box.exe')).toEqual([
+                { pid: 790, name: 'sing-box' }
+            ])
+        } finally {
+            ownedProxyPids.delete(789)
+        }
     })
     it('avoids an existing proxy pool and LAN routes without treating default routes as ownership', () => {
         expect(selectFakeIPRange('0/1 utun1024\n128.0/1 utun1024\n198.18/16 utun1024')).toBe(

@@ -45,7 +45,7 @@ execFileSync(
     }
 )
 const helperSHA256 = hash(output)
-const coreSHA256 = hash('build/electron-core/fluxy-core' + suffix)
+const coreSHA256 = hash('build/electron-core/sing-box' + suffix)
 const buildID = createHash('sha256')
     .update(helperSHA256 + coreSHA256)
     .digest('hex')

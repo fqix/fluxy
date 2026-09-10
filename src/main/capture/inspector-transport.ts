@@ -1,11 +1,14 @@
+import { rm } from 'node:fs/promises'
+import { ownedProxyPids } from '../tun/proxy-discovery'
+import { prepareProxyCore } from './sing-box-proxy'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import http from 'node:http'
 import https from 'node:https'
 import net from 'node:net'
 import { Duplex, PassThrough, Readable, Transform } from 'node:stream'
-import { existsSync, readFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { Transaction } from '../../shared/contracts/model'
 import { StreamChannel } from './proxy-stream'
 import { ProxyWire } from './proxy-wire'
@@ -86,13 +89,15 @@ const call = (hook: Hook | undefined, context: IContext) =>
         hook(context, (error) => (error ? reject(error) : resolve()))
     })
 
-/** goproxy owns sockets and TLS in a Go process; Fluxy owns policy and sessions. */
+/** sing-box owns transport and inspection; Fluxy owns policy and sessions. */
 export class Proxy {
     port = 0
     httpServer?: EventEmitter
     httpAgent!: http.Agent
     httpsAgent!: http.Agent
     private child?: ChildProcess
+    private directory?: string
+    private stopping?: Promise<void>
     private wire?: ProxyWire
     private channel?: StreamChannel
     private states = new Map<string, State>()
@@ -384,7 +389,7 @@ export class Proxy {
             )
         }
     }
-    listen(
+    async listen(
         options: {
             port: number
             host: string
@@ -393,31 +398,43 @@ export class Proxy {
             httpsAgent: http.Agent
             keepAlive: boolean
             timeout: number
-            ingressToken?: string
-            ingressPort?: number
+            corePath: string
+            directory: string
         },
         done: Done
     ) {
         this.httpAgent = options.httpAgent
         this.httpsAgent = options.httpsAgent
         this.httpServer = new EventEmitter()
-        const resources = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
-        const binary = process.platform === 'win32' ? 'fluxy-proxy.exe' : 'fluxy-proxy'
-        const runtime =
-            resources && existsSync(join(resources, 'proxy', binary))
-                ? join(resources, 'proxy', binary)
-                : resolve('build/goproxy', binary)
         const root = this.options.root() ?? {
             certificate: readFileSync(join(options.sslCaDir, 'certs/ca.pem'), 'utf8'),
             key: readFileSync(join(options.sslCaDir, 'keys/ca.private.key'), 'utf8')
         }
-        const child = (this.child = spawn(runtime, [], {
+        const prepared = await prepareProxyCore(
+            options.corePath,
+            options.directory,
+            options.host,
+            options.port
+        )
+        this.directory = prepared.directory
+        const child = (this.child = spawn(options.corePath, ['run', '-c', prepared.config], {
             stdio: ['pipe', 'pipe', 'pipe'],
-            windowsHide: true
+            windowsHide: true,
+            env: {
+                ...process.env,
+                FLUXY_HELPER_STDIN: '1',
+                FLUXY_HELPER_PARENT: String(process.pid)
+            }
         }))
+        if (child.pid) ownedProxyPids.add(child.pid)
+        child.once('exit', () => {
+            if (child.pid) ownedProxyPids.delete(child.pid)
+        })
         this.wire = new ProxyWire(child.stdin!)
         this.channel = new StreamChannel((message) => this.send(message))
         let settled = false,
+            inspectorReady = false,
+            coreReady = false,
             log = ''
         const finish = (error?: Error) => {
             if (!settled) {
@@ -426,54 +443,65 @@ export class Proxy {
                 done(error)
             }
         }
+        const fatal = (error: Error) => {
+            finish(error)
+            if (this.child === child && coreReady && inspectorReady)
+                this.errors.forEach((hook) => hook(null, error, 'INSPECTOR_EXIT'))
+            void this.close()
+        }
         const timer = setTimeout(() => {
-            finish(new Error(`goproxy startup timed out: ${log}`))
-            this.close()
+            fatal(new Error(`sing-box inspector startup timed out: ${log}`))
         }, 15000)
         child.stdout?.on('data', (data) => {
             try {
                 this.wire?.receive(data)
             } catch (error) {
-                finish(error instanceof Error ? error : new Error(String(error)))
-                void this.close()
+                fatal(error instanceof Error ? error : new Error(String(error)))
             }
         })
         child.stderr?.on('data', (data) => {
             log = (log + data).slice(-8000)
+            if (log.includes('sing-box started (')) coreReady = true
+            if (coreReady && inspectorReady) finish()
         })
-        child.on('error', finish)
-        child.stdin?.on('error', finish)
+        child.on('error', fatal)
+        child.stdin?.on('error', fatal)
         child.on('exit', (code) => {
-            const error = new Error(`goproxy exited (${code}): ${log}`)
+            const error = new Error(`sing-box inspector exited (${code}): ${log}`)
             finish(error)
             if (this.child === child)
-                this.errors.forEach((hook) => hook(null, error, 'GOPROXY_EXIT'))
-            for (const id of this.states.keys()) this.fail(id, new Error('goproxy stopped'))
+                this.errors.forEach((hook) => hook(null, error, 'INSPECTOR_EXIT'))
+            for (const id of this.states.keys())
+                this.fail(id, new Error('sing-box inspector stopped'))
             this.channel?.close()
         })
         this.wire.on('message', (message: any) => {
             if (message.type === 'ready') {
                 this.port = message.port
-                finish()
+                inspectorReady = true
+                if (coreReady) finish()
             } else void this.message(message).catch((error) => this.fail(message.id, error))
         })
         this.send({
             type: 'start',
             port: options.port,
             host: options.host,
-            ingressToken: options.ingressToken,
-            ingressPort: options.ingressPort,
+            ingressPort: options.port,
             root
         })
     }
-    async close() {
+    close(): Promise<void> {
+        return (this.stopping ??= this.closeTransport())
+    }
+    private async closeTransport() {
         const child = this.child
         const exited =
-            child && child.exitCode === null && child.signalCode === null
+            child?.pid && child.exitCode === null && child.signalCode === null
                 ? new Promise<void>((resolve) => child.once('exit', () => resolve()))
                 : Promise.resolve()
         this.channel?.close()
         this.child = undefined
+        child?.stdin?.end()
         child?.kill()
         const force = setTimeout(() => child?.kill('SIGKILL'), 2000)
         force.unref()
@@ -484,5 +512,7 @@ export class Proxy {
         this.tunnels.clear()
         await exited
         clearTimeout(force)
+        if (this.directory) await rm(this.directory, { recursive: true, force: true })
+        this.directory = undefined
     }
 }

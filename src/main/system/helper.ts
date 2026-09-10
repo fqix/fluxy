@@ -152,9 +152,9 @@ umask 077
 root=$(/usr/bin/mktemp -d /Library/PrivilegedHelperTools/fluxy-install.XXXXXX)
 trap '/bin/rm -rf "$root"' EXIT
 /usr/bin/install -m 500 ${shellQuote(join(stage, 'fluxy-helper'))} "$root/fluxy-helper"
-/usr/bin/install -m 500 ${shellQuote(join(stage, 'fluxy-core'))} "$root/fluxy-core"
+/usr/bin/install -m 500 ${shellQuote(join(stage, 'sing-box'))} "$root/sing-box"
 [ "$(/usr/bin/shasum -a 256 "$root/fluxy-helper" | /usr/bin/cut -d ' ' -f 1)" = ${shellQuote(manifest.helperSHA256)} ]
-[ "$(/usr/bin/shasum -a 256 "$root/fluxy-core" | /usr/bin/cut -d ' ' -f 1)" = ${shellQuote(manifest.coreSHA256)} ]
+[ "$(/usr/bin/shasum -a 256 "$root/sing-box" | /usr/bin/cut -d ' ' -f 1)" = ${shellQuote(manifest.coreSHA256)} ]
 /usr/bin/install -m 400 ${shellQuote(join(stage, 'pairing.json'))} "$root/pairing.json"
 /usr/bin/install -m 644 ${shellQuote(join(stage, 'service.plist'))} "$root/service.plist"
 [ "$(/usr/bin/shasum -a 256 "$root/pairing.json" | /usr/bin/cut -d ' ' -f 1)" = ${shellQuote(pairingHash)} ]
@@ -165,7 +165,7 @@ trap '/bin/rm -rf "$root"' EXIT
 /usr/sbin/chown root:wheel ${shellQuote(base)}
 /bin/chmod 700 ${shellQuote(base)}
 /bin/mv -f "$root/fluxy-helper" ${shellQuote(base + '/fluxy-helper')}
-/bin/mv -f "$root/fluxy-core" ${shellQuote(base + '/fluxy-core')}
+/bin/mv -f "$root/sing-box" ${shellQuote(base + '/sing-box')}
 /bin/mv -f "$root/pairing.json" ${shellQuote(base + '/pairing.json')}
 /bin/mv -f "$root/service.plist" ${shellQuote(plist)}
 /bin/launchctl enable system/${helperID}
@@ -395,7 +395,7 @@ export class HelperService {
             await chmod(join(this.directory, 'helper-client.json'), 0o600)
             stage = await mkdtemp(join(this.directory, 'helper-install-'))
             await copyFile(this.helperPath, join(stage, 'fluxy-helper'))
-            await copyFile(this.corePath, join(stage, 'fluxy-core'))
+            await copyFile(this.corePath, join(stage, 'sing-box'))
             const signing =
                 process.platform === 'darwin'
                     ? await promisify(execFile)('/usr/bin/codesign', [

@@ -2,7 +2,7 @@
   "name": "fluxy",
   "desktopName": "fluxy.desktop",
   "version": "0.4.3",
-  "description": "Fluxy network inspector — Electron and TypeScript desktop",
+  "description": "Fluxy network inspector \u2014 Electron and TypeScript desktop",
   "private": true,
   "license": "MIT",
   "author": "Fluxy contributors; based on Rockxy",
@@ -16,15 +16,15 @@
     "test:e2e": "npm run build && playwright test",
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",
-    "format": "prettier --write src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json tools/goproxy/*.mjs",
-    "format:check": "prettier --check src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json tools/goproxy/*.mjs",
+    "format": "prettier --write src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json scripts/*.mjs",
+    "format:check": "prettier --check src tests electron.vite.config.ts vitest.config.ts playwright.config.ts tsconfig.json package.json scripts/*.mjs",
     "test:packaged": "FLUXY_TEST_EXECUTABLE=\"$PWD/dist/mac-arm64/Fluxy.app/Contents/MacOS/Fluxy\" playwright test",
-    "core:build": "node build-electron-core.mjs && node build-electron-helper.mjs && npm run proxy:build",
+    "sing-box:test": "node scripts/build-sing-box.mjs --test",
+    "core:build": "node scripts/build-electron-core.mjs && node scripts/build-electron-helper.mjs",
     "predev": "npm run core:build",
     "pretest": "npm run core:build",
-    "test:protocol": "node build-electron-core.mjs && npm run proxy:build && tsx tests/protocol/verify.ts",
-    "test:protocol:public": "node build-electron-core.mjs && npm run proxy:build && tsx tests/protocol/public.ts",
-    "proxy:build": "node tools/goproxy/build.mjs"
+    "test:protocol": "node scripts/build-electron-core.mjs && tsx tests/protocol/verify.ts",
+    "test:protocol:public": "node scripts/build-electron-core.mjs && tsx tests/protocol/public.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
@@ -167,15 +167,15 @@
         "dmg",
         "zip"
       ],
-      "sign": "tools/sign-electron.cjs",
+      "sign": "scripts/sign-electron.mjs",
       "extraResources": [
         {
           "from": "build/electron-core",
           "to": "core",
           "filter": [
-            "fluxy-core",
-            "fluxy-core.build.json",
-            "fluxy-core.licenses.txt"
+            "sing-box",
+            "sing-box.build.json",
+            "sing-box.licenses.txt"
           ]
         },
         {
@@ -185,15 +185,6 @@
             "fluxy-helper",
             "fluxy-helper.json",
             "fluxy-helper.licenses.txt"
-          ]
-        },
-        {
-          "from": "build/goproxy",
-          "to": "proxy",
-          "filter": [
-            "fluxy-proxy",
-            "manifest.json",
-            "licenses.txt"
           ]
         }
       ],
@@ -212,9 +203,9 @@
           "from": "build/electron-core",
           "to": "core",
           "filter": [
-            "fluxy-core.exe",
-            "fluxy-core.exe.build.json",
-            "fluxy-core.exe.licenses.txt"
+            "sing-box.exe",
+            "sing-box.exe.build.json",
+            "sing-box.exe.licenses.txt"
           ]
         },
         {
@@ -224,15 +215,6 @@
             "fluxy-helper.exe",
             "fluxy-helper.exe.json",
             "fluxy-helper.licenses.txt"
-          ]
-        },
-        {
-          "from": "build/goproxy",
-          "to": "proxy",
-          "filter": [
-            "fluxy-proxy.exe",
-            "manifest.json",
-            "licenses.txt"
           ]
         }
       ]
@@ -249,9 +231,9 @@
           "from": "build/electron-core",
           "to": "core",
           "filter": [
-            "fluxy-core",
-            "fluxy-core.build.json",
-            "fluxy-core.licenses.txt"
+            "sing-box",
+            "sing-box.build.json",
+            "sing-box.licenses.txt"
           ]
         },
         {
@@ -261,15 +243,6 @@
             "fluxy-helper",
             "fluxy-helper.json",
             "fluxy-helper.licenses.txt"
-          ]
-        },
-        {
-          "from": "build/goproxy",
-          "to": "proxy",
-          "filter": [
-            "fluxy-proxy",
-            "manifest.json",
-            "licenses.txt"
           ]
         }
       ],

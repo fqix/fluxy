@@ -35,7 +35,7 @@ func secureBase() (string, error) {
 	if os.Geteuid() != 0 {
 		return "", errors.New("helper must run as root")
 	}
-	for _, path := range []string{"/usr/local", "/usr/local/lib", linuxBase, filepath.Join(linuxBase, "pairing.json"), filepath.Join(linuxBase, "fluxy-core"), filepath.Join(linuxBase, "fluxy-helper")} {
+	for _, path := range []string{"/usr/local", "/usr/local/lib", linuxBase, filepath.Join(linuxBase, "pairing.json"), filepath.Join(linuxBase, "sing-box"), filepath.Join(linuxBase, "fluxy-helper")} {
 		st, err := os.Lstat(path)
 		if err != nil {
 			return "", err

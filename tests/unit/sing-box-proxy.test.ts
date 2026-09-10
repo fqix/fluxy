@@ -28,8 +28,7 @@ afterEach(async () => {
 
 function internal() {
     return engine as unknown as {
-        ingress: { child: ChildProcess }
-        proxy: { port: number }
+        proxy: { port: number; child: ChildProcess }
     }
 }
 async function listening(port: number) {
@@ -43,11 +42,11 @@ async function listening(port: number) {
     })
 }
 
-it('uses sing-box on the public port and a private ephemeral inspection port', async () => {
+it('uses one sing-box process for the public listener and embedded inspection', async () => {
     await engine.start()
-    const { ingress, proxy } = internal()
-    expect(ingress.child.spawnfile).toMatch(/fluxy-core(?:\.exe)?$/)
-    expect(proxy.port).not.toBe(store.settings.port)
+    const { proxy } = internal()
+    expect(proxy.child.spawnfile).toMatch(/sing-box(?:\.exe)?$/)
+    expect(proxy.port).toBe(store.settings.port)
     expect(await listening(proxy.port)).toBe(true)
     const socket = net.connect(store.settings.port, '127.0.0.1')
     await once(socket, 'connect')
@@ -76,7 +75,7 @@ it('rolls back a failed core start without enabling the system proxy', async () 
     expect(await listening(store.settings.port)).toBe(false)
 })
 
-it('keeps the TUN inspection listener HTTP-only while sing-box owns SOCKS', async () => {
+it('uses the embedded inspector for TUN bridge CONNECT requests', async () => {
     store.settings.captureMode = 'tun'
     store.settings.ssl = true
     store.settings.sslHosts = ['example.com']
@@ -98,8 +97,6 @@ it('keeps the TUN inspection listener HTTP-only while sing-box owns SOCKS', asyn
             Buffer.from('CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n')
         )
     ).toMatch(/^HTTP\/1\.[01] 200/)
-    // Terminate the invalid HTTP header so rejection does not depend on a timeout.
-    expect(await exchange(Buffer.from([5, 1, 0, 13, 10, 13, 10]))).toMatch(/^HTTP\/1\.[01] 400/)
 })
 
 it('restores system proxy and closes inspection after the ingress process crashes', async () => {
@@ -117,16 +114,16 @@ it('restores system proxy and closes inspection after the ingress process crashe
     )
     engine.onFailure = () => capture.stop()
     await capture.start()
-    const { ingress, proxy } = internal()
+    const { proxy } = internal()
     expect(systemProxy.enabled).toBe(true)
-    ingress.child.kill('SIGKILL')
+    proxy.child.kill('SIGKILL')
     await vi.waitFor(() => expect(engine.running).toBe(false))
     expect(systemProxy.enabled).toBe(false)
     expect(await listening(store.settings.port)).toBe(false)
     expect(await listening(proxy.port)).toBe(false)
 })
 
-it('closes both listeners when their Electron owner dies without cleanup', async () => {
+it('closes the embedded inspector listener when its Electron owner dies without cleanup', async () => {
     const child = spawn(
         process.execPath,
         [
@@ -141,7 +138,7 @@ it('closes both listeners when their Electron owner dies without cleanup', async
         }
     )
     try {
-        const ports = await new Promise<{ public: number; internal: number }>((resolve, reject) => {
+        const ports = await new Promise<{ public: number }>((resolve, reject) => {
             let stdout = '',
                 stderr = ''
             const timeout = setTimeout(
@@ -168,14 +165,12 @@ it('closes both listeners when their Electron owner dies without cleanup', async
             })
         })
         expect(await listening(ports.public)).toBe(true)
-        expect(await listening(ports.internal)).toBe(true)
         const exited = once(child, 'exit')
         child.kill('SIGKILL')
         await exited
         await vi.waitFor(
             async () => {
                 expect(await listening(ports.public)).toBe(false)
-                expect(await listening(ports.internal)).toBe(false)
             },
             { timeout: 12000 }
         )

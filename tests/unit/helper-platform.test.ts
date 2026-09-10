@@ -15,8 +15,8 @@ describe('cross-platform helper integration', () => {
     it('uses local platform endpoints and binaries', () => {
         expect(helperEndpoint('win32')).toBe('\\\\.\\pipe\\dev.fengqi.fluxy.electron.helper')
         expect(helperEndpoint('linux')).toBe('/run/dev.fengqi.fluxy.electron.helper/helper.sock')
-        expect(executableName('fluxy-core', 'win32')).toBe('fluxy-core.exe')
-        expect(executableName('fluxy-core', 'linux')).toBe('fluxy-core')
+        expect(executableName('sing-box', 'win32')).toBe('sing-box.exe')
+        expect(executableName('sing-box', 'linux')).toBe('sing-box')
         expect(supportedHelperPlatform('freebsd')).toBe(false)
         expect(tunInterfaceName(2345, 'darwin')).toBe('utun2345')
         expect(tunInterfaceName(2345, 'linux')).toBe('fluxy2345')

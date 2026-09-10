@@ -132,7 +132,7 @@ func secureBase() (string, error) {
 	if os.Geteuid() != 0 {
 		return "", errors.New("helper must be installed as a launchd service")
 	}
-	for _, path := range []string{base, filepath.Join(base, "pairing.json"), filepath.Join(base, "fluxy-core"), filepath.Join(base, "fluxy-helper")} {
+	for _, path := range []string{base, filepath.Join(base, "pairing.json"), filepath.Join(base, "sing-box"), filepath.Join(base, "fluxy-helper")} {
 		st, err := os.Lstat(path)
 		if err != nil {
 			return "", err

@@ -28,7 +28,7 @@ irm https://raw.githubusercontent.com/fqix/fluxy/main/install.ps1 | iex
 
 使用当前桌面用户打开 PowerShell 执行，脚本会下载并静默安装到当前用户。
 
-脚本自动识别架构并校验 SHA-256；需先发布对应平台的安装包和校验文件。指定版本或预览安装操作（dry-run）详见[安装说明](tools/install/README.md)。脚本源码：[macOS / Linux](install.sh) · [Windows](install.ps1)。
+脚本自动识别架构并校验 SHA-256；需先发布对应平台的安装包和校验文件。使用 `--dry-run` 预览解析出的下载地址，`--version` 指定版本。脚本源码：[macOS / Linux](install.sh) · [Windows](install.ps1)。
 
 ## 开发运行
 
@@ -38,7 +38,7 @@ npm ci
 npm run dev
 ```
 
-需要 Node.js 22.12+ 和 npm。各平台构建均需 Python 3.10+ 和 Go，macOS 另需 Xcode Command Line Tools，用于编译传输核心及 Electron 专用权限助手；不依赖 Rockxy 应用、Xcode 工程或原版 SwiftPM 依赖。打包后的应用已包含所需运行组件。
+需要 Node.js 22.12+ 和 npm。各平台构建均需 Go，macOS 另需 Xcode Command Line Tools，用于编译传输核心及 Electron 专用权限助手；不依赖 Rockxy 应用、Xcode 工程或原版 SwiftPM 依赖。打包后的应用已包含所需运行组件。
 
 ## 主要功能
 
@@ -68,7 +68,7 @@ npm run package
 npm run dist
 ```
 
-测试使用临时目录和本地服务器。实际系统代理、证书信任、权限助手安装及 TUN 路由由应用中的明确操作触发。macOS、Linux、Windows 已有 Helper、TUN、证书信任和打包实现；Linux/Windows 的提权安装与实际路由仍需原生桌面验收。详见 [平台要求](tools/helper/README.md)。
+测试使用临时目录和本地服务器。实际系统代理、证书信任、权限助手安装及 TUN 路由由应用中的明确操作触发。macOS、Linux、Windows 已有 Helper、TUN、证书信任和打包实现；Linux/Windows 的提权安装与实际路由仍需原生桌面验收。详见 [平台要求](helper/README.md)。
 
 ## 项目结构
 
@@ -76,8 +76,8 @@ npm run dist
 - `src/preload`：界面通信接口。
 - `src/renderer`：React 桌面界面。
 - `src/shared`：数据模型及共享逻辑。
-- `tools/helper`：macOS、Linux、Windows 共用的 Go 权限助手。
-- `tools/sing-box`、`third_party/sing-box`：固定版本的传输核心及构建工具。
+- `helper`：macOS、Linux、Windows 共用的 Go 权限助手。
+- `third_party/patches/sing-box`、`third_party/sing-box`：固定版本的传输核心及构建工具。
 - `tests`：单元、集成和桌面测试。
 - `resources`：图标和依赖声明。
 
@@ -85,8 +85,8 @@ npm run dist
 
 Fluxy 原创贡献采用 [MIT 许可证](LICENSE)。第三方依赖和源自 Rockxy 的材料仍适用各自原许可证，不因本次修改而重新授权。详见[版权与适用范围](COPYRIGHT.md)和[第三方声明](THIRD_PARTY_NOTICES.md)。
 
-## goproxy 代理内核
+## sing-box 代理内核
 
-正式抓包使用基于 goproxy 的 Go 子进程，支持 HTTP/HTTPS、HTTP/2、gRPC/gRPCS、SSE、WS/WSS；规则、脚本和断点仍由 Fluxy 主进程执行。依赖版本、构建与协议回归说明见 [tools/goproxy](tools/goproxy/README.md)。应用内置代理二进制，无需单独安装 Go 或 Node.js。
+正式抓包使用 sing-box 子进程，内置基于 goproxy 的检查服务，支持 HTTP/HTTPS、HTTP/2、gRPC/gRPCS、SSE、WS/WSS；规则、脚本和断点仍由 Fluxy 主进程执行。源码补丁、依赖版本和构建说明见 [third_party/patches/sing-box](third_party/patches/sing-box/README.md)。应用内置代理二进制，无需单独安装 Go 或 Node.js。
 
 `npm run test:protocol` 运行本地协议回归，覆盖 SSE 实时事件及取消、双向 WebSocket 文本/二进制帧，以及 gRPC/gRPCS 的 Unary、客户端流、服务端流、双向流、错误状态、trailers 和取消传播。`npm run test:protocol:public` 使用 go-httpbin（httpbingo.org）和 grpcbin（grpcb.in），逐项对比直连与代理结果。响应详情提供 Trailers 页签。

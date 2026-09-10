@@ -24,7 +24,7 @@ import { unusedPort } from '../../src/main/tun/tun'
 import net from 'node:net'
 const execute = promisify(cp.execFile)
 const production = join(process.cwd(), 'build/electron-helper/fluxy-helper')
-const core = join(process.cwd(), 'build/electron-core/fluxy-core')
+const core = join(process.cwd(), 'build/electron-core/sing-box')
 function invoke(path: string, args: string[], input: string) {
     return new Promise<string>((resolve, reject) => {
         const worker = cp.spawn(path, args)
@@ -170,7 +170,7 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
                 }
             })
         )
-        await symlink(core, join(root, 'fluxy-core'))
+        await symlink(core, join(root, 'sing-box'))
         const port = await unusedPort()
         const worker = cp.spawn(testHelper, [], {
             env: {
@@ -367,7 +367,7 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
             const pairing = JSON.parse(await readFile(join(client, stage, 'pairing.json'), 'utf8'))
             pairing.caller.teamID = null
             await writeFile(join(root, 'pairing.json'), JSON.stringify(pairing))
-            await symlink(core, join(root, 'fluxy-core'))
+            await symlink(core, join(root, 'sing-box'))
             worker = originalSpawn(testHelper, [], {
                 env: {
                     ...process.env,

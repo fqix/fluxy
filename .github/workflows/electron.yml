@@ -7,13 +7,9 @@ on:
         'src/**',
         'tests/**',
         'resources/**',
-        'tools/sing-box/**',
-        'tools/goproxy/**',
-        'build-electron-core.mjs',
-        'build-electron-helper.mjs',
+        'third_party/patches/sing-box/**',
         'tools/helper/**',
-        'tools/install/**',
-        'tools/publish-electron-release.mjs',
+        'scripts/**',
         'install.sh',
         'install.ps1',
         'third_party/sing-box',
@@ -27,13 +23,9 @@ on:
         'src/**',
         'tests/**',
         'resources/**',
-        'tools/sing-box/**',
-        'tools/goproxy/**',
-        'build-electron-core.mjs',
-        'build-electron-helper.mjs',
+        'third_party/patches/sing-box/**',
         'tools/helper/**',
-        'tools/install/**',
-        'tools/publish-electron-release.mjs',
+        'scripts/**',
         'install.sh',
         'install.ps1',
         'third_party/sing-box',
@@ -59,18 +51,12 @@ jobs:
         with:
           go-version: '1.27.1'
           cache-dependency-path: |
-            tools/sing-box/go.sum
+            third_party/sing-box/go.sum
             tools/helper/go.sum
-            tools/goproxy/go.sum
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - name: Test build script encoding
-        run: python -m unittest discover -s tools/sing-box -p "test_*.py"
       - run: npm ci
       - name: Install RPM build tools
         if: runner.os == 'Linux'
@@ -81,27 +67,12 @@ jobs:
         working-directory: tools/helper
       - run: go vet ./...
         working-directory: tools/helper
-      - run: go test -race ./...
-        working-directory: tools/goproxy
-      - run: go vet ./...
-        working-directory: tools/goproxy
-      - name: Lint proxy transport
-        if: runner.os == 'Linux'
-        working-directory: tools/goproxy
-        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...
-      - name: Check proxy dependencies
-        if: runner.os == 'Linux'
-        working-directory: tools/goproxy
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
       - run: npm test
       - run: npm run test:protocol
         env:
-          FLUXY_PROXY_RACE: '1'
+          FLUXY_CORE_RACE: '1'
           GORACE: halt_on_error=1
-      - run: powershell -NoProfile -File tools/install/test-windows.ps1
-        if: runner.os == 'Windows'
-      - run: go test -race -tags=with_gvisor ./...
-        working-directory: tools/sing-box
+      - run: npm run sing-box:test
       - run: npm run build
       - name: Playwright desktop tests (macOS / Windows)
         run: npx playwright test

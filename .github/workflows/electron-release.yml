@@ -49,12 +49,8 @@ jobs:
         with:
           go-version: '1.27.1'
           cache-dependency-path: |
-            tools/sing-box/go.sum
+            third_party/sing-box/go.sum
             tools/helper/go.sum
-            tools/goproxy/go.sum
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
       - name: Validate native build architecture
         run: node -e 'if(process.platform !== process.env.FLUXY_BUILD_PLATFORM || process.arch !== process.env.FLUXY_BUILD_ARCH) throw Error("Runner architecture differs from release target")'
       - name: Validate release version
@@ -77,40 +73,21 @@ jobs:
           if (configured.length && configured.length !== keys.length) throw Error('Incomplete macOS signing configuration')
           require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT, `mode=${configured.length ? 'developer-id' : 'adhoc'}\n`)
           NODE
-      - name: Test build script encoding
-        run: python -m unittest discover -s tools/sing-box -p "test_*.py"
       - run: npm ci
       - name: Install RPM build tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
-      - run: go test -race ./...
-        working-directory: tools/goproxy
-        if: matrix.platform != 'win32' || matrix.arch != 'arm64'
-      - run: go test ./...
-        working-directory: tools/goproxy
-        if: matrix.platform == 'win32' && matrix.arch == 'arm64'
-      - run: go vet ./...
-        working-directory: tools/goproxy
-      - name: Lint proxy transport
-        if: matrix.platform == 'linux' && matrix.arch == 'x64'
-        working-directory: tools/goproxy
-        run: go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.0 run ./...
-      - name: Check proxy dependencies
-        if: matrix.platform == 'linux' && matrix.arch == 'x64'
-        working-directory: tools/goproxy
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...
+      - run: npm run sing-box:test
       - run: npm test
       - run: npm run test:protocol
         env:
-          FLUXY_PROXY_RACE: ${{ matrix.platform == 'win32' && matrix.arch == 'arm64' && '0' || '1' }}
+          FLUXY_CORE_RACE: ${{ matrix.platform == 'win32' && matrix.arch == 'arm64' && '0' || '1' }}
           GORACE: halt_on_error=1
       - run: npm run build
       # The upstream Intel Electron development app is unsigned. The helper's
       # native caller authentication must be exercised against the signed package.
       - run: npx playwright test --grep-invert 'helper\.spec\.ts'
         if: runner.os == 'macOS'
-      - run: powershell -NoProfile -File tools/install/test-windows.ps1
-        if: runner.os == 'Windows'
       - name: Build signed and notarized macOS artifacts
         if: runner.os == 'macOS' && steps.mac-signing.outputs.mode == 'developer-id'
         env:
@@ -149,7 +126,7 @@ jobs:
       - name: Prepare installers and checksums
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: node tools/publish-electron-release.mjs --prepare
+        run: node scripts/publish-electron-release.mjs --prepare
       - uses: actions/upload-artifact@v7
         with:
           name: installers-${{ matrix.platform }}-${{ matrix.arch }}
@@ -173,4 +150,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
-        run: node tools/publish-electron-release.mjs --publish release-artifacts
+        run: node scripts/publish-electron-release.mjs --publish release-artifacts

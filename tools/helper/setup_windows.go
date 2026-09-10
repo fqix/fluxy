@@ -352,7 +352,7 @@ func performNativeSetup(r setupRequest) (resultErr error) {
 	}
 	defer os.RemoveAll(stage)
 	step = "copy and verify installation files"
-	for _, entry := range [][3]string{{"fluxy-helper", "fluxy-helper.exe", r.HelperSHA256}, {"fluxy-core", "fluxy-core.exe", r.CoreSHA256}, {"pairing.json", "pairing.json", r.PairingSHA256}} {
+	for _, entry := range [][3]string{{"fluxy-helper", "fluxy-helper.exe", r.HelperSHA256}, {"sing-box", "sing-box.exe", r.CoreSHA256}, {"pairing.json", "pairing.json", r.PairingSHA256}} {
 		if err = copyPinned(filepath.Join(r.Stage, entry[0]), filepath.Join(stage, entry[1]), entry[2]); err != nil {
 			return err
 		}

@@ -267,7 +267,7 @@ func (s *session) start(raw json.RawMessage) error {
 	if err = os.WriteFile(path, data, 0600); err != nil {
 		return err
 	}
-	core := filepath.Join(s.base, "fluxy-core"+exeSuffix())
+	core := filepath.Join(s.base, "sing-box"+exeSuffix())
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	check := exec.CommandContext(ctx, core, "check", "-c", path)

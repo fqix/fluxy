@@ -67,26 +67,27 @@ attribution; this table does not imply they are all shipped in the desktop app.
 ## Embedded goproxy transport
 
 Fluxy embeds **goproxy v1.9.1** (`github.com/elazarl/goproxy`), distributed
-under the BSD-3-Clause license, in the `fluxy-proxy` Go child process.
-The adapter and exact module checksums are in [tools/goproxy](tools/goproxy).
+under the BSD-3-Clause license, in sing-box's `fluxy-inspector` service.
+The adapter source and dependency changes are supplied in
+[the inspector patch](third_party/patches/sing-box/0003-fluxy-inspector-service.patch).
 WebSocket framing uses `github.com/gobwas/ws` v1.4.0 (MIT), with
 `github.com/gobwas/httphead` v0.1.0 and `github.com/gobwas/pool` v0.2.1 (MIT).
-HTTP/2 and SOCKS routing use `golang.org/x/net` v0.55.0 and
-`golang.org/x/text` v0.39.0 (BSD-3-Clause).
+HTTP/2 and SOCKS routing use the pinned sing-box module's `golang.org/x/net`
+and `golang.org/x/text` dependencies (BSD-3-Clause).
 
-Every package includes `resources/proxy/licenses.txt` with the license texts
-for the compiled dependencies and Go runtime, and `resources/proxy/manifest.json`
-with the engine version, target and binary/module checksums. The source of truth
-for dependencies is [go.mod](tools/goproxy/go.mod) and [go.sum](tools/goproxy/go.sum).
+Every package includes `resources/core/sing-box.licenses.txt` with the license texts
+for compiled dependencies and the Go runtime, and `resources/core/sing-box.build.json`
+with engine versions, target, patch checksums and binary checksum. Dependency pins
+are in upstream `go.mod`/`go.sum` plus the inspector patch.
 
 Protocol tests additionally use `@grpc/grpc-js` (Apache-2.0),
 `https-proxy-agent` (MIT) and `tsx` (MIT). These are development dependencies.
 
 ## Cross-platform Go Helper
 
-The Helper source and module checksums are in [tools/helper](tools/helper).
-Its dependencies are pinned in [go.mod](tools/helper/go.mod) and
-[go.sum](tools/helper/go.sum).
+The Helper source and module checksums are in [helper](helper).
+Its dependencies are pinned in [go.mod](helper/go.mod) and
+[go.sum](helper/go.sum).
 
 | Component                       | Version                 | License                                               | Use                  |
 | ------------------------------- | ----------------------- | ----------------------------------------------------- | -------------------- |
@@ -98,7 +99,7 @@ The macOS adapter uses Apple system frameworks through cgo. Linux and Windows
 use their respective operating-system APIs. Apple frameworks are supplied by
 macOS; they are not vendored SwiftPM dependencies.
 
-[build-electron-helper.mjs](build-electron-helper.mjs) assembles the Go and
+[scripts/build-electron-helper.mjs](scripts/build-electron-helper.mjs) assembles the Go and
 x/sys license texts, plus go-winio on Windows, into
 `build/electron-helper/fluxy-helper.licenses.txt`. The package includes this file
 under `helper/` on every platform, alongside the Helper binary and its manifest.
@@ -106,18 +107,24 @@ under `helper/` on every platform, alongside the Helper binary and its manifest.
 ## Embedded transport core
 
 The transport core is built from the sing-box submodule at
-[third_party/sing-box](third_party/sing-box), using the wrapper and build profile
-in [tools/sing-box](tools/sing-box).
+[third_party/sing-box](third_party/sing-box), using its `cmd/sing-box` CLI and the build profile
+in [third_party/patches/sing-box](third_party/patches/sing-box).
 
 - sing-box version: **1.14.0**.
 - Pinned revision: `0b8995879f29a9b98ee027bc17b75e101445b238`.
 - Pinned Go toolchain: `go1.27.1`.
-- Build tag: `with_gvisor`.
+- Build tags: `with_gvisor,with_fluxy`, selected by the transport-profile patch.
 
-These values are recorded in [pin.json](tools/sing-box/pin.json). Module versions
-and checksums are recorded in [go.mod](tools/sing-box/go.mod) and
-[go.sum](tools/sing-box/go.sum). The pin identifies the upstream source revision;
-any local changes must be accounted for in the corresponding source distribution.
+The version, revision and toolchain are recorded in [pin.json](third_party/patches/sing-box/pin.json). Module versions
+and checksums are recorded in [go.mod](third_party/sing-box/go.mod) and
+[go.sum](third_party/sing-box/go.sum). The pin identifies the upstream source revision.
+Local modifications are carried as a reviewable patch series in
+[third_party/patches/sing-box](third_party/patches/sing-box) rather than committed into the
+submodule; the generated build manifest records each applied patch and its
+SHA-256, and the notice bundle states that the build was modified. The series adds Fluxy transport extensions and helper lifecycle handling, and limits
+compiled protocols to the capture transport profile. The third patch also embeds
+the Fluxy goproxy inspection engine (MIT), whose notice is included in the patched
+source and generated license bundle. Its dependencies retain their own licenses.
 
 sing-box is copyright 2022 nekohasekai and is distributed under
 **GPL-3.0-or-later**. Its [upstream license](third_party/sing-box/LICENSE) also
@@ -126,20 +133,20 @@ consent. The `github.com/sagernet/sing` dependency is also GPL-3.0-or-later.
 The selected gVisor fork includes Apache-2.0 license text and additional
 component notices. Other compiled dependencies retain their own licenses.
 
-[tools/sing-box/build.py](tools/sing-box/build.py) collects available license,
+[scripts/build-sing-box.mjs](scripts/build-sing-box.mjs) collects available license,
 copying, notice, copyright and patent files from the compiled package graph for
 the selected target, including Go toolchain notices. The generated build manifest
 records the module versions used. The notice bundle and provenance manifest are
 packaged beside the executable:
 
-| Platform      | Core executable       | License bundle                     | Build manifest                   |
-| ------------- | --------------------- | ---------------------------------- | -------------------------------- |
-| macOS / Linux | `core/fluxy-core`     | `core/fluxy-core.licenses.txt`     | `core/fluxy-core.build.json`     |
-| Windows       | `core/fluxy-core.exe` | `core/fluxy-core.exe.licenses.txt` | `core/fluxy-core.exe.build.json` |
+| Platform      | Core executable     | License bundle                   | Build manifest                 |
+| ------------- | ------------------- | -------------------------------- | ------------------------------ |
+| macOS / Linux | `core/sing-box`     | `core/sing-box.licenses.txt`     | `core/sing-box.build.json`     |
+| Windows       | `core/sing-box.exe` | `core/sing-box.exe.licenses.txt` | `core/sing-box.exe.build.json` |
 
 Paths are relative to the packaged application's resources directory
 (`Contents/Resources` on macOS, `resources` on Linux and Windows). Retain the
-license bundles, pinned source, local modifications, wrapper, checksums and
+license bundles, pinned source, local modifications, checksums and
 build instructions with the corresponding release. The MIT license for original
 Fluxy contributions does not replace the licenses of the embedded core.
 

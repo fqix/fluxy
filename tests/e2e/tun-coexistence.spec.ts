@@ -93,7 +93,7 @@ test('detected Mihomo keeps TUN and never switches settings to SOCKS5', async ()
             fs.readFile = ((path: unknown, ...args: unknown[]) => {
                 if (String(path) === '/etc/resolv.conf')
                     return Promise.resolve('nameserver 192.0.2.53\n')
-                if (/fluxy-core(?:\.exe)?\.build\.json$/.test(String(path)))
+                if (/sing-box(?:\.exe)?\.build\.json$/.test(String(path)))
                     return Promise.reject(
                         new Error('TUN startup intentionally stopped before elevation')
                     )

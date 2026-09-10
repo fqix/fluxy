@@ -2,6 +2,9 @@ import { nativeWindowsQuery } from './native-windows'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
+// Owned ingress PIDs also identify Windows snapshots that contain only a basename.
+export const ownedProxyPids = new Set<number>()
+
 export interface ProxyProcess {
     pid: number
     name: 'Mihomo' | 'sing-box'
@@ -9,7 +12,17 @@ export interface ProxyProcess {
 export function parseProxyProcesses(output: string): ProxyProcess[] {
     return output.split('\n').flatMap((line) => {
         const match = line.trim().match(/^(\d+)\s+(.+)$/)
-        if (!match || Number(match[1]) === process.pid) return []
+        if (!match || Number(match[1]) === process.pid || ownedProxyPids.has(Number(match[1])))
+            return []
+        const path = match[2].replaceAll('\\', '/').toLowerCase()
+        if (
+            path.endsWith('/fluxy.app/contents/resources/core/sing-box') ||
+            path.endsWith('/fluxy-helper/sing-box') ||
+            path.endsWith('/fluxy-helper/sing-box.exe') ||
+            path.endsWith('/fluxyhelper/sing-box.exe') ||
+            path.endsWith('/dev.fengqi.fluxy.electron.helper/sing-box')
+        )
+            return []
         const executable = match[2]
             .split(/[\\/]/)
             .pop()
@@ -20,7 +33,6 @@ export function parseProxyProcesses(output: string): ProxyProcess[] {
             : ['sing-box', 'singbox'].includes(executable ?? '')
               ? 'sing-box'
               : undefined
-        // Fluxy's embedded sing-box is fluxy-core, not one of these executable names.
         return name ? [{ pid: Number(match[1]), name }] : []
     })
 }

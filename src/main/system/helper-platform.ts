@@ -110,7 +110,7 @@ root=$(mktemp -d /usr/local/lib/fluxy-install.XXXXXX)
 trap 'rm -rf "$root"' EXIT
 ${[
     ['fluxy-helper', hashes.helperSHA256],
-    ['fluxy-core', hashes.coreSHA256],
+    ['sing-box', hashes.coreSHA256],
     ['pairing.json', pairingHash]
 ]
     .map(
@@ -126,7 +126,7 @@ if systemctl cat ${id}.service >/dev/null 2>&1; then
  [ "$(systemctl show -p MainPID --value ${id}.service)" = 0 ]
 fi
 install -d -m 700 -o root -g root /usr/local/lib/fluxy-helper
-mv -f "$root/fluxy-helper" "$root/fluxy-core" "$root/pairing.json" /usr/local/lib/fluxy-helper/
+mv -f "$root/fluxy-helper" "$root/sing-box" "$root/pairing.json" /usr/local/lib/fluxy-helper/
 cat > /etc/systemd/system/${id}.service <<'FLUXY_SERVICE'
 [Unit]
 Description=Fluxy privileged network helper

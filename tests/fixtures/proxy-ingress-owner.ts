@@ -7,10 +7,7 @@ async function main() {
     store.settings.port = await unusedPort()
     const engine = new ProxyEngine(store, () => {})
     await engine.start()
-    const privatePort = (engine as unknown as { proxy: { port: number } }).proxy.port
-    process.stdout.write(
-        JSON.stringify({ public: store.settings.port, internal: privatePort }) + '\n'
-    )
+    process.stdout.write(JSON.stringify({ public: store.settings.port }) + '\n')
 }
 void main().catch((error) => {
     console.error(error)

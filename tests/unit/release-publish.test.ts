@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 // @ts-expect-error Release publishing is a dependency-free Node script.
-import { publishRelease } from '../../tools/publish-electron-release.mjs'
+import { publishRelease } from '../../scripts/publish-electron-release.mjs'
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }))
 afterEach(() => vi.resetAllMocks())
