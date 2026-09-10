@@ -126,6 +126,14 @@ export function tunConfig(options: {
             rules: [
                 { inbound: ['egress'], action: 'route', outbound: 'direct' },
                 ...(splitDNS ? [{ inbound: ['capture'], port: 53, action: 'hijack-dns' }] : []),
+                // The inspector handles HTTPS over TCP; reject QUIC so browsers can fall back.
+                {
+                    inbound: ['capture'],
+                    network: 'udp',
+                    port: 443,
+                    action: 'reject',
+                    no_drop: true
+                },
                 { action: 'sniff', sniffer: ['http', 'tls'], timeout: '300ms' },
                 { network: 'tcp', protocol: ['http', 'tls'], action: 'route', outbound: 'inspect' }
             ]

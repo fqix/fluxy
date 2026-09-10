@@ -86,6 +86,8 @@ func Config(p Params) map[string]any {
 		"outbounds": []any{direct, map[string]any{"type": "http", "tag": "inspect", "server": "127.0.0.1", "server_port": p.BridgePort, "username": "fluxy", "password": p.Password}},
 		"route": map[string]any{"default_domain_resolver": "local", "final": "direct", "rules": []any{
 			map[string]any{"inbound": []string{"egress"}, "action": "route", "outbound": "direct"},
+			// Reject QUIC before sniffing so browsers can fall back to inspected HTTPS over TCP.
+			map[string]any{"inbound": []string{"capture"}, "network": "udp", "port": 443, "action": "reject", "no_drop": true},
 			map[string]any{"action": "sniff", "sniffer": []string{"http", "tls"}, "timeout": "300ms"},
 			map[string]any{"network": "tcp", "protocol": []string{"http", "tls"}, "action": "route", "outbound": "inspect"},
 		}},

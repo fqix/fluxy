@@ -1,6 +1,7 @@
 package tun
 
 import (
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -8,6 +9,25 @@ import (
 	"dev.fengqi.fluxy/helper/internal/protocol"
 	"dev.fengqi.fluxy/helper/internal/splitdns"
 )
+
+func TestQUICFallback(t *testing.T) {
+	for _, scoped := range []bool{false, true} {
+		p := validParams()
+		index := 1
+		if scoped {
+			p.SplitDNS = splitParams()
+			index = 2 // DNS hijacking must stay ahead of rejection.
+		}
+		rules := Config(p)["route"].(map[string]any)["rules"].([]any)
+		want := map[string]any{"inbound": []string{"capture"}, "network": "udp", "port": 443, "action": "reject", "no_drop": true}
+		if !reflect.DeepEqual(rules[index], want) {
+			t.Fatalf("scoped=%v: QUIC can bypass inspection: %v", scoped, rules)
+		}
+		if rules[index+1].(map[string]any)["action"] != "sniff" {
+			t.Fatal("QUIC rejection must precede TCP inspection")
+		}
+	}
+}
 
 func validParams() Params {
 	name := "fluxy2345"

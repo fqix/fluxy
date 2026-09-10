@@ -58,6 +58,13 @@ describe('TUN configuration', () => {
             action: 'route',
             outbound: 'direct'
         })
+        expect(config.route.rules[1]).toEqual({
+            inbound: ['capture'],
+            network: 'udp',
+            port: 443,
+            action: 'reject',
+            no_drop: true
+        })
         expect(config.inbounds[0]).toMatchObject({
             type: 'tun',
             auto_route: true,
