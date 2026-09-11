@@ -177,6 +177,7 @@ function main() {
                     '-ldflags=' + ldflags,
                     './common/ja3',
                     './common/sniff',
+                    './protocol/socks',
                     './service/fluxyinspector/...',
                     './include',
                     COMMAND
@@ -193,6 +194,7 @@ function main() {
                     ...testFlags,
                     './common/ja3',
                     './common/sniff',
+                    './protocol/socks',
                     './service/fluxyinspector/...',
                     './include',
                     COMMAND

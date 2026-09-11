@@ -174,6 +174,9 @@ try {
                 false
             )
             console.log('PASS HTTP/3: excluded SSL host stays encrypted and uses passthrough')
+        } catch (error) {
+            console.error(proxy.logs())
+            throw error
         } finally {
             await proxy.stop()
         }

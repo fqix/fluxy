@@ -97,6 +97,12 @@ against a live Chrome/TUN session here; the automated suite uses a Go HTTP/3 cli
 Check the browser's Network protocol column for `h3`; an `Alt-Svc: h3=...` response
 advertises server support but does not prove the current request used HTTP/3.
 
+`0006-socks-udp-race.patch` binds SOCKS5 UDP replies to the client learned from the
+first packet before concurrent QUIC reads and writes begin. This avoids the pinned
+sing adapter's unsynchronized reply-address updates, while preserving the first
+packet cache, idle timeout and TCP control connection ownership. Its full-duplex
+UDP regression test runs with the core's race checks.
+
 ## Build and test
 
 ```sh
