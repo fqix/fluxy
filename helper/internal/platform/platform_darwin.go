@@ -74,11 +74,13 @@ func SecureBase() (string, error) {
 		}
 		return os.Getenv("FLUXY_HELPER_TEST_ROOT"), nil
 	}
-	base := "/Library/PrivilegedHelperTools/" + protocol.ServiceID
+	base := "/Library/Application Support/" + protocol.ServiceID
 	if os.Geteuid() != 0 {
 		return "", errors.New("helper must be installed as a launchd service")
 	}
-	for _, path := range []string{base, filepath.Join(base, "pairing.json"), filepath.Join(base, "sing-box"), filepath.Join(base, "fluxy-helper")} {
+	// The executable is the single file launchd runs from /Library/PrivilegedHelperTools;
+	// the core and pairing live in the root-only support directory.
+	for _, path := range []string{"/Library/PrivilegedHelperTools/" + protocol.ServiceID, base, filepath.Join(base, "pairing.json"), filepath.Join(base, "sing-box")} {
 		st, err := os.Lstat(path)
 		if err != nil {
 			return "", err

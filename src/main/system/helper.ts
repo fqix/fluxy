@@ -19,6 +19,12 @@ import {
 } from './helper-platform'
 
 export const helperID = 'dev.fengqi.fluxy.electron.helper'
+// The helper itself follows the SMJobBless convention: one executable named after its
+// label directly in /Library/PrivilegedHelperTools. Everything the helper needs at run
+// time lives in a root-only support directory, because the tools directory holds
+// executables, not state.
+export const helperExecutable = `/Library/PrivilegedHelperTools/${helperID}`
+export const helperSupport = `/Library/Application Support/${helperID}`
 export const helperSocket = helperEndpoint()
 interface Reply {
     buildID: string
@@ -143,7 +149,7 @@ export function installationScript(
     pairingHash: string,
     plistHash: string
 ) {
-    const base = `/Library/PrivilegedHelperTools/${helperID}`
+    const base = helperSupport
     const plist = `/Library/LaunchDaemons/${helperID}.plist`
     // Fresh root-owned staging prevents the app from changing installed files after validation.
     // Expected hashes are part of the single command the user authorizes.
@@ -162,10 +168,12 @@ trap '/bin/rm -rf "$root"' EXIT
 [ "$(/usr/bin/shasum -a 256 "$root/service.plist" | /usr/bin/cut -d ' ' -f 1)" = ${shellQuote(plistHash)} ]
 /usr/bin/plutil -lint "$root/service.plist" >/dev/null
 /bin/launchctl bootout system/${helperID} 2>/dev/null || true
+# Earlier releases installed a directory under this name; mv would descend into it.
+[ -d ${shellQuote(helperExecutable)} ] && /bin/rm -rf ${shellQuote(helperExecutable)}
 /bin/mkdir -p ${shellQuote(base)}
 /usr/sbin/chown root:wheel ${shellQuote(base)}
 /bin/chmod 700 ${shellQuote(base)}
-/bin/mv -f "$root/fluxy-helper" ${shellQuote(base + '/fluxy-helper')}
+/bin/mv -f "$root/fluxy-helper" ${shellQuote(helperExecutable)}
 /bin/mv -f "$root/sing-box" ${shellQuote(base + '/sing-box')}
 /bin/mv -f "$root/pairing.json" ${shellQuote(base + '/pairing.json')}
 /bin/mv -f "$root/service.plist" ${shellQuote(plist)}
@@ -260,7 +268,7 @@ FLUXY_PUBLIC_CA
 }
 export function uninstallationScript() {
     // Only remove fixed Electron helper paths; certificate removal is independent.
-    const base = `/Library/PrivilegedHelperTools/${helperID}`
+    const base = helperSupport
     const plist = `/Library/LaunchDaemons/${helperID}.plist`
     const runtime = `/private/var/run/${helperID}`
     return `set -eu
@@ -298,7 +306,7 @@ case "$pid" in
         ;;
 esac
 /bin/rm -f ${shellQuote(plist)}
-/bin/rm -rf ${shellQuote(base)} ${shellQuote(runtime)}
+/bin/rm -rf ${shellQuote(helperExecutable)} ${shellQuote(base)} ${shellQuote(runtime)}
 /bin/rm -f ${shellQuote(helperSocket)}`
 }
 export class HelperService {
@@ -500,7 +508,7 @@ export class HelperService {
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key><string>${helperID}</string>
-<key>ProgramArguments</key><array><string>/Library/PrivilegedHelperTools/${helperID}/fluxy-helper</string></array>
+<key>ProgramArguments</key><array><string>${helperExecutable}</string></array>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
 <key>ProcessType</key><string>Interactive</string>
 <key>ExitTimeOut</key><integer>20</integer>

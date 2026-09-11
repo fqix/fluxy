@@ -128,6 +128,6 @@ func nativeSetupCommand(command string, cert *x509.Certificate) string {
 	}
 	encoded := base64.StdEncoding.EncodeToString(cert.Raw)
 	return command + "\nfluxy_result=$?\n[ \"$fluxy_result\" -eq 0 ] || exit \"$fluxy_result\"\n" +
-		"'/Library/PrivilegedHelperTools/" + protocol.ServiceID + "/fluxy-helper' trust-ca-privileged <<'FLUXY_PUBLIC_CA'\n\"" +
+		"'/Library/PrivilegedHelperTools/" + protocol.ServiceID + "' trust-ca-privileged <<'FLUXY_PUBLIC_CA'\n\"" +
 		encoded + "\"\nFLUXY_PUBLIC_CA\n"
 }

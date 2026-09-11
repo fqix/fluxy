@@ -8,7 +8,7 @@ Fluxy uses the same authenticated, newline-delimited JSON RPC protocol on all th
 | Linux with systemd | `internal/platform/platform_linux.go` | systemd, `pkexec` | Unix socket, paired UID and executable hash |
 | Windows 10/11 | `internal/platform/platform_windows.go` | Windows service, UAC | Named pipe, paired SID and executable hash |
 
-The Go helper accepts only status, typed TUN start/ready/stop, and install/remove of a self-signed Fluxy root CA. It generates its own core configuration. It never accepts executable paths, shell commands, or arbitrary configuration files over RPC. Installation verifies staged binary and pairing checksums after copying into an administrator-owned directory. The application keeps a random pairing token in its private data directory.
+The Go helper accepts only status, typed TUN start/ready/stop, and install/remove of a self-signed Fluxy root CA. It generates its own core configuration. It never accepts executable paths, shell commands, or arbitrary configuration files over RPC. Installation verifies staged binary and pairing checksums after copying into an administrator-owned directory. On macOS the executable follows the `SMJobBless` layout, a single file at `/Library/PrivilegedHelperTools/<service id>`, while `sing-box` and `pairing.json` live in the root-only `/Library/Application Support/<service id>/`; the helper refuses to start unless every one of those paths is root-owned, non-writable by others and not a symlink. The application keeps a random pairing token in its private data directory.
 
 TUN capture uses one helper-owned sing-box process containing the TUN inbound,
 the public mixed inbound, authenticated direct-egress ingress, and the embedded

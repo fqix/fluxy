@@ -53,7 +53,7 @@ describe('Fake IP TUN coexistence', () => {
 124 /usr/local/bin/sing-box
 125 /Applications/Fluxy.app/Contents/Resources/core/sing-box
 126 /tmp/sing-box/not-a-proxy
-127 /Library/PrivilegedHelperTools/dev.fengqi.fluxy.electron.helper/sing-box
+127 /Library/Application Support/dev.fengqi.fluxy.electron.helper/sing-box
 128 C:/ProgramData/FluxyHelper/sing-box.exe
 129 /Applications/Other.app/Contents/Resources/core/sing-box
 ${process.pid} /tmp/sing-box

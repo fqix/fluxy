@@ -54,7 +54,7 @@ func TestNativeSetupRunsTrustOnlyAfterSuccessfulInstallation(t *testing.T) {
 				install = "(exit 7)"
 			}
 			command := nativeSetupCommand(install, cert)
-			command = strings.ReplaceAll(command, "/Library/PrivilegedHelperTools/"+protocol.ServiceID+"/fluxy-helper", fake)
+			command = strings.ReplaceAll(command, "/Library/PrivilegedHelperTools/"+protocol.ServiceID, fake)
 			err := exec.Command("/bin/sh", "-c", command).Run()
 			if !installOK {
 				if err == nil {
@@ -105,7 +105,7 @@ func TestNativeSetupPropagatesTrustFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := nativeSetupCommand("(exit 0)", &x509.Certificate{Raw: []byte("public")})
-	command = strings.ReplaceAll(command, "/Library/PrivilegedHelperTools/"+protocol.ServiceID+"/fluxy-helper", fake)
+	command = strings.ReplaceAll(command, "/Library/PrivilegedHelperTools/"+protocol.ServiceID, fake)
 	output, err := exec.Command("/bin/sh", "-c", command).CombinedOutput()
 	var failure *exec.ExitError
 	if !errors.As(err, &failure) || failure.ExitCode() != 23 || !strings.Contains(string(output), "trust denied") {
