@@ -96,7 +96,9 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         const p = { ...params(), bridgePort: 0, inspector: { host: '127.0.0.1', port: 6060 } }
         const value = await invoke(production, ['validate-tun'], JSON.stringify(p))
         const config = JSON.parse(value)
-        expect(config.services).toEqual([{ type: 'fluxy-inspector', tag: 'inspector' }])
+        expect(config.services).toEqual([
+            { type: 'fluxy-inspector', tag: 'inspector', packet_egress: 'direct' }
+        ])
         expect(config.inbounds.map((v: any) => v.type)).toEqual(['tun', 'http', 'fluxy-mixed'])
         expect(config.outbounds.find((v: any) => v.tag === 'inspect')).toEqual({
             type: 'fluxy-inspect',
