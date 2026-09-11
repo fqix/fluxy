@@ -26,6 +26,7 @@ try {
         }
     )
     const origin = spawn(binary, [], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const originExited = new Promise<void>((resolve) => origin.once('close', () => resolve()))
     const events: any[] = []
     const lines = createInterface({ input: origin.stdout })
     let originError = ''
@@ -68,6 +69,7 @@ try {
                     (item) => item.url.endsWith(path) && item.state === 'completed'
                 )
             )
+        let pending: ReturnType<typeof request> | undefined
         try {
             const body = Buffer.from([0, 1, 127, 128, 255])
             const response = await request('/binary', body)
@@ -143,7 +145,7 @@ try {
                     phase: 'both'
                 })
             ]
-            const pending = request('/breakpoint', Buffer.from('paused'))
+            pending = request('/breakpoint', Buffer.from('paused'))
             pending.catch(() => {})
             for (const phase of ['request', 'response'] as const) {
                 const transaction = await waitFor(() =>
@@ -179,6 +181,7 @@ try {
             throw error
         } finally {
             await proxy.stop()
+            await pending?.catch(() => {})
         }
         // Exercise the same in-process packet egress used by the Helper. The
         // deliberately unavailable TCP route must never be used for H3.
@@ -251,6 +254,7 @@ try {
     } finally {
         origin.stdin.end()
         origin.kill()
+        await originExited
         lines.close()
     }
 } finally {
