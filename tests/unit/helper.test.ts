@@ -270,7 +270,9 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
     })
     it('removes certificates without an installed helper, elevation or daemon RPC', async () => {
         const authorize = vi.fn(async (_command: string) => {})
-        const trustDesktop = vi.fn(async (_action: string, _der: Buffer) => {})
+        const trustDesktop = vi.fn(
+            async (_action: string, _der: Buffer): Promise<string | void> => {}
+        )
         const helper = new HelperService(
             directory,
             testHelper,
@@ -288,8 +290,13 @@ describe.skipIf(process.platform !== 'darwin')('privileged helper boundary (root
         const rpc = vi.spyOn(internals, 'operation')
         const der = Buffer.from('public CA fixture')
         try {
-            await helper.removeCertificate(der)
+            expect(await helper.removeCertificate(der)).toEqual({ adminTrust: false })
             expect(trustDesktop).toHaveBeenCalledExactlyOnceWith('untrust-ca-desktop', der)
+            expect(authorize).not.toHaveBeenCalled()
+            // The helper reports a leftover admin-domain record; the desktop never
+            // infers it from verify-cert, which trustd may still answer from cache.
+            trustDesktop.mockResolvedValueOnce('{"adminTrust":true}\n')
+            expect(await helper.removeCertificate(der)).toEqual({ adminTrust: true })
             expect(authorize).not.toHaveBeenCalled()
             // Admin-domain trust from older releases still needs the elevated path.
             await helper.removeLegacyCertificate(der)

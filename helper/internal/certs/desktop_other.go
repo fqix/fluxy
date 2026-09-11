@@ -18,8 +18,8 @@ func TrustPrivileged(*x509.Certificate) error {
 	return errors.New("elevated native CA trust is only supported on macOS")
 }
 
-func RemoveTrustDesktop(*x509.Certificate) error {
-	return errors.New("desktop CA trust removal is only supported on macOS")
+func RemoveTrustDesktop(*x509.Certificate) (bool, error) {
+	return false, errors.New("desktop CA trust removal is only supported on macOS")
 }
 
 func RemovePrivileged(*x509.Certificate) error {

@@ -46,7 +46,8 @@ test('removes legacy system trust and reinstalls the same certificate with visib
                     process.execPath,
                     [
                         '-e',
-                        'process.stdin.resume(); process.stdin.on("end", () => process.exit(0))'
+                        'process.stdin.resume(); process.stdin.on("end", () => { console.log(process.argv[1]); process.exit(0) })',
+                        JSON.stringify({ adminTrust: action === 'untrust-ca-desktop' })
                     ],
                     { ...options, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } }
                 )

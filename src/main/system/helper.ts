@@ -180,14 +180,16 @@ function runBundledHelper(
     args: string[],
     input: string,
     failure: string
-): Promise<void> {
-    return new Promise<void>((resolve, reject) => {
+): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
         const worker = spawn(helperPath, args, {
             stdio: ['pipe', 'pipe', 'pipe'],
             timeout: 180000
         })
+        let stdout = ''
         let output = ''
         worker.stdout.on('data', (b) => {
+            stdout = (stdout + b.toString()).slice(-16384)
             output = (output + b.toString()).slice(-16384)
         })
         worker.stderr.on('data', (b) => {
@@ -195,7 +197,7 @@ function runBundledHelper(
         })
         worker.once('error', reject)
         worker.once('close', (code) =>
-            code === 0 ? resolve() : reject(new Error(output.trim() || failure))
+            code === 0 ? resolve(stdout) : reject(new Error(output.trim() || failure))
         )
         worker.stdin.on('error', () => {})
         worker.stdin.end(input)
@@ -213,7 +215,7 @@ export function authorizeInstallation(
         ['authorize-desktop'],
         JSON.stringify({ command, certificate: certificate?.toString('base64') }),
         'Native helper setup canceled or failed'
-    )
+    ).then(() => undefined)
 }
 // macOS root CA trust in the user domain. com.apple.trust-settings.user is granted
 // by the session owner, so this needs no elevation and presents exactly one dialog.
@@ -224,7 +226,7 @@ export function desktopCertificate(
     action: 'trust-ca-desktop' | 'untrust-ca-desktop',
     helperPath: string,
     certificate: Buffer
-): Promise<void> {
+): Promise<string> {
     return runBundledHelper(
         helperPath,
         [action],
@@ -324,7 +326,7 @@ export class HelperService {
         private trustDesktop = (
             action: 'trust-ca-desktop' | 'untrust-ca-desktop',
             certificate: Buffer
-        ) => desktopCertificate(action, this.helperPath, certificate)
+        ): Promise<string | void> => desktopCertificate(action, this.helperPath, certificate)
     ) {}
     private setStatus(status: HelperStatus) {
         this.status = status
@@ -612,26 +614,37 @@ export class HelperService {
             this.operations--
         }
     }
-    async removeCertificate(der: Buffer) {
+    // On macOS the result says whether an admin-domain record from a release before
+    // the user trust domain still exists; only removeLegacyCertificate can clear it.
+    async removeCertificate(der: Buffer): Promise<{ adminTrust: boolean }> {
         if (this.installing) throw new Error('Wait for Helper Tool installation to finish')
         if (this.trusting) throw new Error('Wait for certificate trust to finish')
         if (this.uninstalling) throw new Error('Helper Tool is being uninstalled')
         this.revoking = true
-        this.trusting = (async () => {
+        const removal = (async () => {
             if (process.platform === 'darwin') {
-                await this.desktopCertificate('untrust-ca-desktop', der)
-                return
+                const output = await this.desktopCertificate('untrust-ca-desktop', der)
+                try {
+                    return { adminTrust: JSON.parse(output || '{}').adminTrust === true }
+                } catch {
+                    return { adminTrust: false }
+                }
             }
-            if (process.platform === 'win32') {
-                await this.authorizeCertificate(der, 'remove')
-                return
-            }
-            await this.operation('ca.remove', der.toString('base64'), 90000, false)
-        })().finally(() => {
-            this.trusting = undefined
-            this.revoking = false
-        })
-        return this.trusting
+            if (process.platform === 'win32') await this.authorizeCertificate(der, 'remove')
+            else await this.operation('ca.remove', der.toString('base64'), 90000, false)
+            return { adminTrust: false }
+        })()
+        // The caller observes the result; the in-flight marker must not reject unobserved.
+        this.trusting = removal
+            .then(
+                () => undefined,
+                () => undefined
+            )
+            .finally(() => {
+                this.trusting = undefined
+                this.revoking = false
+            })
+        return removal
     }
     // Releases before the user trust domain installed the CA system-wide; only root
     // can clear that record, so it keeps the elevated path for existing machines.
@@ -669,10 +682,10 @@ export class HelperService {
     private async desktopCertificate(
         action: 'trust-ca-desktop' | 'untrust-ca-desktop',
         der: Buffer
-    ) {
+    ): Promise<string> {
         await this.assets(false)
         if (this.closing) throw new Error('Fluxy is closing')
-        await this.trustDesktop(action, der)
+        return (await this.trustDesktop(action, der)) ?? ''
     }
     installCertificate(der: Buffer): Promise<void> {
         if (this.revoking)

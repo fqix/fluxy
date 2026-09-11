@@ -74,10 +74,21 @@ static OSStatus fluxy_delete_login_ca(SecCertificateRef cert) {
  CFRelease(query); CFRelease(search); CFRelease(keychain); CFRelease(expected);
  return status;
 }
+// Admin-domain trust settings are readable without privileges; only clearing them
+// needs root. Reporting them directly avoids trusting a verify-cert answer that
+// trustd may still serve from cache right after the user-domain removal.
+static int fluxy_admin_trust_exists(SecCertificateRef cert) {
+ CFArrayRef settings = NULL;
+ OSStatus status = SecTrustSettingsCopyTrustSettings(cert, kSecTrustSettingsDomainAdmin, &settings);
+ if (settings) CFRelease(settings);
+ if (status == errSecSuccess) return 1;
+ if (status == errSecItemNotFound || status == errSecNoTrustSettings) return 0;
+ return -1;
+}
 // The desktop session owns only what it installed: user-domain trust settings and
 // the login keychain copy. Admin-domain trust from an older release still needs
 // the elevated remove-ca-privileged path.
-static int fluxy_remove_desktop_trust(const void *bytes, long size) {
+static int fluxy_remove_desktop_trust(const void *bytes, long size, int *admin) {
  SecuritySessionId session;
  SessionAttributeBits attributes;
  OSStatus status = SessionGetInfo(callerSecuritySession, &session, &attributes);
@@ -101,6 +112,10 @@ static int fluxy_remove_desktop_trust(const void *bytes, long size) {
  }
  if (status == errSecItemNotFound || status == errSecNoTrustSettings) status = errSecSuccess;
  if (status == errSecSuccess) status = fluxy_delete_login_ca(cert);
+ if (status == errSecSuccess) {
+  *admin = fluxy_admin_trust_exists(cert);
+  if (*admin < 0) status = errSecInternalComponent;
+ }
  CFRelease(cert);
  return status;
 }
@@ -226,18 +241,24 @@ func TrustPrivileged(cert *x509.Certificate) error {
 }
 
 // RemoveTrustDesktop owns any authorization UI; the daemon only performs cleanup afterwards.
-func RemoveTrustDesktop(cert *x509.Certificate) error {
+// RemoveTrustDesktop reports whether an admin-domain record, which only the
+// elevated remove-ca-privileged path can clear, still trusts the certificate.
+func RemoveTrustDesktop(cert *x509.Certificate) (adminTrust bool, err error) {
 	if protocol.Testing {
-		return errors.New("CA mutations are disabled in the rootless test helper")
+		return false, errors.New("CA mutations are disabled in the rootless test helper")
 	}
 	if os.Geteuid() == 0 {
-		return errors.New("certificate trust removal must run in the desktop user session, not as root")
+		return false, errors.New("certificate trust removal must run in the desktop user session, not as root")
 	}
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	data := C.CBytes(cert.Raw)
 	defer C.free(data)
-	return removalAuthorizationError(int(C.fluxy_remove_desktop_trust(data, C.long(len(cert.Raw)))))
+	var admin C.int
+	if err := removalAuthorizationError(int(C.fluxy_remove_desktop_trust(data, C.long(len(cert.Raw)), &admin))); err != nil {
+		return false, err
+	}
+	return admin == 1, nil
 }
 
 func removalAuthorizationError(status int) error {

@@ -106,7 +106,10 @@ unchanged.
 `trust-ca-privileged` and `remove-ca-privileged` remain for the admin domain.
 Machines set up before this change still carry an admin-domain record that only
 root can clear, so certificate removal runs the unelevated removal first and falls
-back to the elevated uninstaller only while the CA still verifies as trusted.
+back to the elevated uninstaller only when `untrust-ca-desktop` reports
+`{"adminTrust": true}`. It reads the admin-domain trust settings directly, which
+needs no privileges; a `verify-cert` probe would be wrong here because trustd can
+keep answering from cache for a moment after the user-domain record is removed.
 Expired self-signed Fluxy roots remain removable. Rootless test helpers disable
 certificate mutations; tests simulate authorization without altering system trust.
 
@@ -114,8 +117,8 @@ The macOS **Helper uninstall** action stops capture and removes only the helper 
 Certificates and system/browser trust are preserved. **Certificate → Uninstall Certificate…**
 removes CA trust separately, even after Helper has been uninstalled. It runs the
 integrity-checked bundled helper's `untrust-ca-desktop` in the desktop session. Only
-when the CA still verifies as trusted afterwards — an admin-domain record from a
-release before the user trust domain — does it fall back to an elevated shell that
+when that command reports a remaining admin-domain record — from a release before
+the user trust domain — does it fall back to an elevated shell that
 copies the bundled helper into a root-owned temporary directory, checks its SHA-256
 and invokes `remove-ca-privileged`. Browser trust cleanup follows successful system
 removal. Saved traffic, custom CA trust and the local CA identity remain unchanged.

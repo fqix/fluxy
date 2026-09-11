@@ -94,7 +94,12 @@ func command() error {
 			return certs.RemovePrivileged(cert)
 		}
 		if os.Args[1] == "untrust-ca-desktop" {
-			return certs.RemoveTrustDesktop(cert)
+			adminTrust, err := certs.RemoveTrustDesktop(cert)
+			if err != nil {
+				return err
+			}
+			// The desktop decides whether the elevated legacy cleanup is still needed.
+			return json.NewEncoder(os.Stdout).Encode(map[string]any{"adminTrust": adminTrust})
 		}
 		if err = valid(cert); err != nil {
 			return err

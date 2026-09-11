@@ -986,12 +986,12 @@ else {
             )
             await helper.refresh()
             certificateTrust = new CertificateTrust(store.directory, async (der) => {
-                await helper.removeCertificate(der)
                 // Machines set up before the user trust domain still carry an
-                // admin-domain record that only the elevated helper can clear.
-                if (process.platform !== 'darwin') return
-                if ((await certificateStatus(join(store.directory, 'certificates'))).trusted)
-                    await helper.removeLegacyCertificate(der)
+                // admin-domain record that only the elevated helper can clear. The
+                // helper reports it directly: verify-cert can still answer from
+                // trustd's cache right after the user-domain removal.
+                const { adminTrust } = await helper.removeCertificate(der)
+                if (adminTrust) await helper.removeLegacyCertificate(der)
             })
             if (process.platform === 'linux' && !customCertificates.rootIdentity())
                 await certificateTrust
