@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -16,7 +16,11 @@ it('builds the reduced CLI and records the applied patches', async () => {
     const manifest = JSON.parse(await readFile(binary + '.build.json', 'utf8'))
     expect(manifest.profile).toBe('fluxy-transport')
     expect(manifest.tags).toEqual(['with_gvisor', 'with_fluxy'])
-    expect(manifest.patches).toHaveLength(4)
+    const patches = (await readdir('third_party/patches/sing-box'))
+        .filter((name) => name.endsWith('.patch'))
+        .sort()
+    expect(patches.length).toBeGreaterThan(0)
+    expect(manifest.patches.map((patch: { name: string }) => patch.name)).toEqual(patches)
     for (const module of [
         'github.com/sagernet/sing-cloudflared',
         'github.com/sagernet/sing-quic',
