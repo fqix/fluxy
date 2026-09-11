@@ -202,7 +202,7 @@ function Pane({
                         tab={tab}
                         text={
                             tab === 'Raw'
-                                ? `${request ? `${t.method} ${t.path} HTTP/1.1` : `HTTP/1.1 ${t.status ?? ''} ${t.statusMessage ?? ''}`}\n${Object.entries(
+                                ? `${request ? `${t.method} ${t.path} HTTP/${t.httpVersion ?? '1.1'}` : `HTTP/${t.httpVersion ?? '1.1'} ${t.status ?? ''} ${t.statusMessage ?? ''}`}\n${Object.entries(
                                       h
                                   )
                                       .map(([k, v]) => `${k}: ${v}`)
@@ -312,6 +312,7 @@ export function Details({ t, run }: { t?: Transaction; run: Run }) {
                     Method: t.method,
                     Status: `${t.status ?? '—'} ${t.statusMessage ?? ''}`,
                     Protocol: t.protocol,
+                    ...(t.httpVersion ? { 'HTTP Version': t.httpVersion } : {}),
                     Client: t.client,
                     'Client source': t.clientSource ?? 'unknown',
                     'Client PID': t.clientPID?.toString() ?? '—',

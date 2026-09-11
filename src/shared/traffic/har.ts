@@ -16,7 +16,7 @@ export function toHAR(items: Transaction[]) {
                 request: {
                     method: t.method,
                     url: t.url,
-                    httpVersion: 'HTTP/1.1',
+                    httpVersion: `HTTP/${t.httpVersion ?? '1.1'}`,
                     cookies: [],
                     headers: t.requestHeaderEntries ?? headers(t.requestHeaders),
                     queryString: [...new URL(t.url).searchParams].map(([name, value]) => ({
@@ -37,7 +37,8 @@ export function toHAR(items: Transaction[]) {
                 response: {
                     status: t.status ?? 0,
                     statusText: t.statusMessage ?? '',
-                    httpVersion: 'HTTP/1.1',
+                    httpVersion: `HTTP/${t.httpVersion ?? '1.1'}`,
+                    _trailers: headers(t.responseTrailers ?? {}),
                     cookies: [],
                     headers: t.responseHeaderEntries ?? headers(t.responseHeaders),
                     content: {
@@ -82,6 +83,7 @@ const entrySchema = z.object({
     time: z.number().min(0).default(0),
     timings: z.record(z.string(), z.number()).optional(),
     request: z.object({
+        httpVersion: z.string().max(20).optional(),
         method: z.string().max(30),
         url: z
             .string()
@@ -204,6 +206,10 @@ export function fromHAR(input: unknown): Transaction[] {
             host: url.hostname,
             path: url.pathname + url.search,
             protocol: websocket ? 'WebSocket' : url.protocol === 'https:' ? 'HTTPS' : 'HTTP',
+            httpVersion: e.request.httpVersion?.replace(/^HTTP\//i, ''),
+            responseTrailers: Object.fromEntries(
+                e.response._trailers.map((h) => [h.name.toLowerCase(), h.value])
+            ),
             client: 'Imported',
             requestHeaderEntries,
             responseHeaderEntries,
