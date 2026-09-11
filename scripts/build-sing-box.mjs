@@ -165,6 +165,7 @@ function main() {
         const ldflags = readFileSync(join(cwd, 'release/LDFLAGS'), 'utf8').trim()
         const flags = ['-mod=readonly', '-tags=' + tags.join(',')]
         if (values.test) {
+            const testFlags = ['-mod=readonly', '-tags=' + [...tags, 'integration'].join(',')]
             const race = target !== 'windows' || arches[0] !== 'arm64'
             const env = { ...envFor(arches[0]), CGO_ENABLED: race ? '1' : '0' }
             run(
@@ -172,8 +173,10 @@ function main() {
                 [
                     'test',
                     ...(race ? ['-race'] : []),
-                    ...flags,
+                    ...testFlags,
                     '-ldflags=' + ldflags,
+                    './common/ja3',
+                    './common/sniff',
                     './service/fluxyinspector/...',
                     './include',
                     COMMAND
@@ -183,10 +186,22 @@ function main() {
                     env
                 }
             )
-            run(GO, ['vet', ...flags, './service/fluxyinspector/...', './include', COMMAND], {
-                cwd,
-                env
-            })
+            run(
+                GO,
+                [
+                    'vet',
+                    ...testFlags,
+                    './common/ja3',
+                    './common/sniff',
+                    './service/fluxyinspector/...',
+                    './include',
+                    COMMAND
+                ],
+                {
+                    cwd,
+                    env
+                }
+            )
             return
         }
         const slices = arches.map((arch) => {

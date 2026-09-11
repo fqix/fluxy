@@ -14,8 +14,14 @@ export function proxyIngressConfig(host: string, port: number) {
         services: [{ type: 'fluxy-inspector', tag: 'inspector' }],
         inbounds: [{ type: 'fluxy-mixed', tag: 'proxy', listen: host, listen_port: port }],
         outbounds: [{ type: 'fluxy-inspect', tag: 'inspect', inspector: 'inspector' }],
-        // UDP cannot be inspected by the HTTP engine. Never silently bypass it.
-        route: { final: 'inspect', rules: [{ network: 'udp', action: 'reject' }] }
+        route: {
+            final: 'inspect',
+            rules: [
+                { network: 'udp', action: 'sniff', sniffer: ['quic'], timeout: '300ms' },
+                { network: 'udp', protocol: 'quic', action: 'route', outbound: 'inspect' },
+                { network: 'udp', action: 'reject' }
+            ]
+        }
     }
 }
 

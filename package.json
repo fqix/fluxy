@@ -23,7 +23,8 @@
     "core:build": "node scripts/build-sing-box.mjs && node scripts/build-electron-helper.mjs",
     "predev": "npm run core:build",
     "pretest": "npm run core:build",
-    "test:protocol": "node scripts/build-sing-box.mjs && tsx tests/protocol/verify.ts",
+    "test:protocol": "node scripts/build-sing-box.mjs && tsx tests/protocol/verify.ts && tsx tests/protocol/http3.ts",
+    "test:protocol:h3": "node scripts/build-sing-box.mjs && tsx tests/protocol/http3.ts",
     "test:protocol:public": "node scripts/build-sing-box.mjs && tsx tests/protocol/public.ts"
   },
   "dependencies": {

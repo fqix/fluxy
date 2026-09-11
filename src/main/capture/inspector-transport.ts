@@ -128,6 +128,7 @@ export class Proxy {
             certificate: (host: string) => Promise<{ certificate: string; key: string } | undefined>
             root: () => { certificate: string; key: string } | undefined
             route: (url: string) => string
+            inspectQUIC?: (host: string) => boolean
         }
     ) {}
     onRequest(hook: Hook) {
@@ -206,6 +207,17 @@ export class Proxy {
             } catch (error) {
                 this.send({ type: 'certificate-result', id, error: String(error) })
             }
+            return
+        }
+        if (type === 'quic') {
+            this.send({
+                type: 'quic-result',
+                id,
+                inspect: this.options.inspectQUIC?.(message.host) ?? false,
+                route: this.options.route(
+                    `https://${net.isIP(message.host) === 6 ? `[${message.host}]` : message.host}/`
+                )
+            })
             return
         }
         if (type === 'connect') {

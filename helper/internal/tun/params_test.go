@@ -1,8 +1,10 @@
 package tun
 
 import (
+	"fmt"
 	"reflect"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 
@@ -26,6 +28,43 @@ func TestQUICFallback(t *testing.T) {
 		if rules[index+1].(map[string]any)["action"] != "sniff" {
 			t.Fatal("QUIC rejection must precede TCP inspection")
 		}
+	}
+}
+
+func TestHTTP3InspectorRouting(t *testing.T) {
+	for _, scoped := range []bool{false, true} {
+		t.Run(fmt.Sprint("scoped=", scoped), func(t *testing.T) {
+			p := validParams()
+			p.Inspector = &InspectorParams{Port: 6060, Host: "127.0.0.1"}
+			if scoped {
+				p.SplitDNS = splitParams()
+			}
+			config := Config(p)
+			service := config["services"].([]any)[0].(map[string]any)
+			if service["packet_egress"] != "direct" {
+				t.Fatal("H3 must use the configured egress")
+			}
+			rules := config["route"].(map[string]any)["rules"].([]any)
+			sniffed, routed := false, false
+			for _, item := range rules {
+				rule := item.(map[string]any)
+				if rule["action"] == "sniff" {
+					sniffed = slices.Contains(rule["sniffer"].([]string), "quic")
+				}
+				if rule["protocol"] == "quic" {
+					routed = true
+					if !sniffed || rule["network"] != "udp" || rule["outbound"] != "inspect" {
+						t.Fatalf("invalid H3 route: %v", rule)
+					}
+				}
+				if rule["action"] == "reject" && rule["port"] == 443 {
+					t.Fatal("H3 still rejected")
+				}
+			}
+			if !routed {
+				t.Fatal("missing H3 inspection route")
+			}
+		})
 	}
 }
 

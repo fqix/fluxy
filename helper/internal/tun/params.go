@@ -106,10 +106,14 @@ func Config(p Params) map[string]any {
 	}
 	if p.Inspector != nil {
 		c["log"] = map[string]any{"level": "info", "output": "stderr", "timestamp": true}
-		c["services"] = []any{map[string]any{"type": "fluxy-inspector", "tag": "inspector"}}
+		c["services"] = []any{map[string]any{"type": "fluxy-inspector", "tag": "inspector", "packet_egress": "direct"}}
 		c["inbounds"] = append(c["inbounds"].([]any), map[string]any{"type": "fluxy-mixed", "tag": "proxy", "listen": p.Inspector.Host, "listen_port": p.Inspector.Port})
 		c["outbounds"] = []any{direct, map[string]any{"type": "fluxy-inspect", "tag": "inspect", "inspector": "inspector"}}
 		route := c["route"].(map[string]any)
+		// The in-process inspector terminates HTTP/3 and shares the same egress.
+		rules := route["rules"].([]any)
+		rules[1] = map[string]any{"action": "sniff", "sniffer": []string{"http", "tls", "quic"}, "timeout": "300ms"}
+		rules[2] = map[string]any{"inbound": []string{"capture"}, "network": "udp", "protocol": "quic", "action": "route", "outbound": "inspect"}
 		route["rules"] = append([]any{map[string]any{"inbound": []string{"proxy"}, "action": "route", "outbound": "inspect"}}, route["rules"].([]any)...)
 	}
 	if p.SplitDNS != nil {

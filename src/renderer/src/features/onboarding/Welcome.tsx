@@ -148,7 +148,7 @@ export function Welcome({
             title: isTun ? 'TUN Capture' : 'Socks Proxy',
             detail: isTun
                 ? 'Capture selected domains across apps. Complete Helper and CA setup above, then enable TUN.'
-                : 'Connect your app to Fluxy’s local SOCKS5 endpoint to capture HTTP and HTTPS traffic. HTTPS inspection requires trusting the root certificate. Supports TCP; UDP relay is not available.',
+                : 'Connect your app to Fluxy’s local SOCKS5 endpoint to capture HTTP, HTTPS and HTTP/3 traffic. HTTPS and HTTP/3 inspection require trusting the root certificate. HTTP/3 uses SOCKS5 UDP; other UDP protocols are not supported.',
             icon: Network,
             done:
                 snapshot.settings.captureMode === 'tun'

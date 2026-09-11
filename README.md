@@ -44,7 +44,7 @@ Use Node.js 22.12+ and npm. All builds need Go for the transport core and helper
 
 ## Features
 
-- HTTP/HTTPS, HTTP/2, gRPC/gRPCS streaming, SSE and WS/WSS inspection, system proxy integration and TUN capture on macOS, Linux and Windows.
+- HTTP/HTTPS, HTTP/2, HTTP/3, gRPC/gRPCS streaming, SSE and WS/WSS inspection, system proxy integration and TUN capture on macOS, Linux and Windows. HTTP/3 inspection uses TUN or SOCKS5 UDP, with the Fluxy root CA trusted and SSL inspection enabled for the destination. Chrome imposes additional QUIC certificate restrictions; see [HTTP/3 client setup](third_party/patches/sing-box/README.md#http3-client-setup).
 - Application attribution, advanced filtering, projects, sessions and HAR interchange.
 - Request/response breakpoints, mapping and header rules, network condition presets and bandwidth shaping.
 - Request/response/timing and text Diff, comparison history, pinning and export.

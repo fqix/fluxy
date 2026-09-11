@@ -183,8 +183,8 @@ export function NetworkConditions({
                     </label>
                 ))}
                 <p className="muted">
-                    Packet loss: 0%, matching the native implementation. UDP, QUIC and encrypted
-                    passthrough tunnels are unaffected.
+                    Packet loss: 0%. Limits apply to inspected HTTP bodies, including HTTP/3. Other
+                    UDP traffic and encrypted passthrough tunnels are unaffected.
                 </p>
                 <div className="button-row">
                     <Button

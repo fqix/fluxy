@@ -417,6 +417,10 @@ export class ProxyEngine {
             () => this.transportEgress
         )
         const proxy = new Proxy({
+            inspectQUIC: (host) =>
+                !this.bypassed(host) &&
+                this.store.settings.ssl &&
+                this.store.settings.sslHosts.some((pattern) => matchPattern(pattern, host)),
             certificate: async (host) =>
                 this.customCertificates?.hasServer(host)
                     ? this.customCertificates.server(host)
@@ -912,7 +916,7 @@ export class ProxyEngine {
             if (slice.length) requestChunks.push(slice)
             requestStored += slice.length
             if (t.requestBytes > limit) t.truncated = true
-            if (t.httpVersion === '2.0') {
+            if (t.httpVersion === '2.0' || t.httpVersion === '3.0') {
                 const body = Buffer.concat(requestChunks)
                 this.captureBody(t, 'request', body)
                 this.publish(t)
@@ -1005,6 +1009,7 @@ export class ProxyEngine {
             if (t.responseBytes > limit) t.truncated = true
             if (
                 t.httpVersion === '2.0' ||
+                t.httpVersion === '3.0' ||
                 /text\/event-stream/.test(t.responseHeaders['content-type'] ?? '')
             ) {
                 const body = Buffer.concat(responseChunks)

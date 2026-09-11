@@ -23,7 +23,11 @@ export interface Capture {
     trailers?: Record<string, string>
     frames: { isClient?: boolean; opcode?: number; data: string }[]
 }
-export async function startProxy(originCA: string, _targets: number | string[]) {
+export async function startProxy(
+    originCA: string,
+    _targets: number | string[],
+    configure?: (engine: ProxyEngine) => void
+) {
     const directory = await mkdtemp(join(tmpdir(), 'fluxy-protocol-'))
     const probe = net.createServer().listen(0, '127.0.0.1')
     await once(probe, 'listening')
@@ -33,6 +37,7 @@ export async function startProxy(originCA: string, _targets: number | string[]) 
     Object.assign(store.settings, { port, ssl: true, sslHosts: ['*'], localhostOnly: true })
     const agent = originCA ? new https.Agent({ ca: originCA }) : undefined
     const engine = new ProxyEngine(store, () => {}, agent)
+    configure?.(engine)
     try {
         await engine.start()
     } catch (error) {

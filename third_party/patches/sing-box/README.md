@@ -60,12 +60,50 @@ of starting its own core. The route to `fluxy-inspect` stays in process.
 network manager. Its interface monitor runs asynchronously during startup; this
 prevents the race detected when running the combined process with `-race`.
 
+`0005-fluxy-http3.patch` adds QUIC/HTTP/3 interception to the embedded inspector
+using the already pinned `github.com/sagernet/quic-go` module. Routed UDP flows
+retain their client identity and actual destination, including Alt-Svc ports.
+The existing CA, custom certificates, IPC body streams, rules, scripts and
+breakpoints also handle HTTP/3. The reduced protocol registry stays in place;
+enabling HTTP/3 inspection does not enable unrelated QUIC proxy protocols.
+
+HTTP/3 requires TUN or a client using SOCKS5 UDP, a trusted Fluxy CA and a matching
+SSL inspection host. Excluded hosts pass through encrypted. In TUN mode, the
+inspector's `packet_egress: direct` uses the same bound-interface or SOCKS outbound
+as the rest of the core. In ordinary proxy mode, a configured upstream HTTP/SOCKS
+proxy carries decrypted requests over HTTP/2 or HTTP/1.1; native H3 egress is used
+when there is no upstream proxy. Extended CONNECT/WebTransport and 0-RTT acceptance
+are not implemented. The legacy separate TCP inspection bridge still rejects
+UDP 443; the Helper's combined process supports H3.
+
+### HTTP/3 client setup
+
+Clients must send UDP through TUN or support SOCKS5 UDP ASSOCIATE. A system HTTP
+proxy alone does not carry native HTTP/3. QUIC flows advertising `h3` use the
+inspection policy; other QUIC ALPNs pass through encrypted in TUN mode.
+
+Chrome/Chromium normally rejects QUIC certificates issued by user-installed CAs,
+even when those CAs are trusted for HTTPS. This can cause fallback to HTTP/2.
+See [Chromium's QUIC documentation](https://www.chromium.org/quic/playing-with-quic/).
+Current Chromium source permits trusted local roots for hosts selected by
+`--origin-to-force-quic-on` ([session pool](https://chromium.googlesource.com/chromium/src/+/HEAD/net/quic/quic_session_pool.cc),
+[proof verifier](https://chromium.googlesource.com/chromium/src/+/HEAD/net/quic/crypto/proof_verifier_chromium.cc)).
+For a controlled Google test, use a separate browser profile, trust the Fluxy CA
+for that browser, enable TUN and SSL inspection for `www.google.com`, and launch
+Chrome with `--user-data-dir=<separate-test-profile> --no-proxy-server
+--enable-quic --origin-to-force-quic-on=www.google.com:443`. Certificate validation
+still applies. This behavior is version-dependent and has not been validated
+against a live Chrome/TUN session here; the automated suite uses a Go HTTP/3 client.
+Check the browser's Network protocol column for `h3`; an `Alt-Svc: h3=...` response
+advertises server support but does not prove the current request used HTTP/3.
+
 ## Build and test
 
 ```sh
 git submodule update --init third_party/sing-box
 npm run core:build
 npm run sing-box:test
+npm run test:protocol:h3
 build/electron-core/sing-box version
 # Optional universal macOS build:
 node scripts/build-sing-box.mjs --arch arm64 --arch x86_64

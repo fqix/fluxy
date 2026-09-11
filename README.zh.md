@@ -87,6 +87,6 @@ Fluxy 原创贡献采用 [MIT 许可证](LICENSE)。第三方依赖和源自 Roc
 
 ## sing-box 代理内核
 
-正式抓包使用 sing-box 子进程，内置基于 goproxy 的检查服务，支持 HTTP/HTTPS、HTTP/2、gRPC/gRPCS、SSE、WS/WSS；规则、脚本和断点仍由 Fluxy 主进程执行。源码补丁、依赖版本和构建说明见 [third_party/patches/sing-box](third_party/patches/sing-box/README.md)。应用内置代理二进制，无需单独安装 Go 或 Node.js。
+正式抓包使用 sing-box 子进程，内置检查服务，支持 HTTP/HTTPS、HTTP/2、HTTP/3、gRPC/gRPCS、SSE、WS/WSS；规则、脚本和断点仍由 Fluxy 主进程执行。HTTP/3 通过 TUN 或 SOCKS5 UDP 接入，需要信任 Fluxy 根证书，并在 SSL 抓包范围中包含目标域名；仅配置系统 HTTP 代理不会捕获原生 H3。Chrome 对 QUIC 还有额外的证书限制，仅信任用户 CA 可能仍回退到 H2，详见 [H3 客户端配置](third_party/patches/sing-box/README.md#http3-client-setup)。源码补丁、依赖版本和构建说明见 [third_party/patches/sing-box](third_party/patches/sing-box/README.md)。应用内置代理二进制，无需单独安装 Go 或 Node.js。
 
 `npm run test:protocol` 运行本地协议回归，覆盖 SSE 实时事件及取消、双向 WebSocket 文本/二进制帧，以及 gRPC/gRPCS 的 Unary、客户端流、服务端流、双向流、错误状态、trailers 和取消传播。`npm run test:protocol:public` 使用 go-httpbin（httpbingo.org）和 grpcbin（grpcb.in），逐项对比直连与代理结果。响应详情提供 Trailers 页签。

@@ -126,7 +126,8 @@ export function tunConfig(options: {
             rules: [
                 { inbound: ['egress'], action: 'route', outbound: 'direct' },
                 ...(splitDNS ? [{ inbound: ['capture'], port: 53, action: 'hijack-dns' }] : []),
-                // The inspector handles HTTPS over TCP; reject QUIC so browsers can fall back.
+                // This legacy HTTP bridge only carries TCP. The Helper's combined
+                // TUN/inspector configuration handles HTTP/3 in process.
                 {
                     inbound: ['capture'],
                     network: 'udp',
